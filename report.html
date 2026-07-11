@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt Report</title>
+  <style>
+    :root {
+      --surface:     #fcfcfb;
+      --surface-alt: #f0efec;
+      --text-pri:    #0b0b0b;
+      --text-sec:    #52514e;
+      --text-muted:  #898781;
+      --accent:      #2a78d6;
+      --sep:         #e1e0d9;
+      --grid:        #e1e0d9;
+      --s1:          #2a78d6;
+      --s2:          #1baf7a;
+      --radius:      10px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface:     #1a1a19;
+        --surface-alt: #2c2c2a;
+        --text-pri:    #ffffff;
+        --text-sec:    #c3c2b7;
+        --text-muted:  #898781;
+        --accent:      #3987e5;
+        --sep:         #2c2c2a;
+        --grid:        #2c2c2a;
+        --s1:          #3987e5;
+        --s2:          #199e70;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--surface);
+      color: var(--text-pri);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }
+
+    /* Header */
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+    .page-meta  { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    .btn {
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      border: 1px solid var(--sep);
+      background: var(--surface-alt);
+      color: var(--text-pri);
+      transition: opacity 0.1s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.8; }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-danger {
+      color: #c0392b;
+      border-color: var(--sep);
+    }
+    @media (prefers-color-scheme: dark) {
+      .btn-danger { color: #e66767; }
+    }
+    a.btn { text-decoration: none; }
+
+    /* Stat cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 640px) {
+      .cards { grid-template-columns: repeat(2, 1fr); }
+    }
+    .card {
+      background: var(--surface-alt);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .card-value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    .card-label { font-size: 12px; color: var(--text-muted); }
+    .card.accent .card-value { color: var(--accent); }
+
+    /* Charts */
+    .chart-section { margin-bottom: 32px; }
+    .chart-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .chart-wrap {
+      background: var(--surface-alt);
+      border-radius: var(--radius);
+      padding: 20px 20px 16px;
+      position: relative;
+      height: 220px;
+      overflow: hidden;
+    }
+    canvas { display: block; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--text-muted);
+    }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-title { font-size: 16px; font-weight: 600; color: var(--text-sec); margin-bottom: 6px; }
+    .empty-desc  { font-size: 13px; }
+
+    /* Footer */
+    .footer {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Prompt Report</div>
+        <div class="page-meta" id="dateRange">Loading…</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-danger" id="clearBtn">Clear data</button>
+        <button class="btn btn-primary" id="exportBtn">Export CSV</button>
+      </div>
+    </div>
+
+    <div id="mainContent">
+      <div class="cards">
+        <div class="card">
+          <div class="card-value" id="statPrompts">—</div>
+          <div class="card-label">Prompts sent</div>
+        </div>
+        <div class="card">
+          <div class="card-value" id="statInput">—</div>
+          <div class="card-label">Input tokens</div>
+        </div>
+        <div class="card">
+          <div class="card-value" id="statOutput">—</div>
+          <div class="card-label">Output tokens</div>
+        </div>
+        <div class="card accent">
+          <div class="card-value" id="statTotal">—</div>
+          <div class="card-label">Total tokens</div>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Prompts per day</div>
+        <div class="chart-wrap">
+          <canvas id="promptChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Token usage per day</div>
+        <div class="chart-wrap">
+          <canvas id="tokenChart"></canvas>
+        </div>
+      </div>
+
+      <div class="footer">
+        Token counts are estimates (~4 chars/token). &nbsp;·&nbsp;
+        <a href="#" id="settingsLink">Settings</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="lib/chart.min.js"></script>
+  <script src="report.js"></script>
+</body>
+</html>

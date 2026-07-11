@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Prompt Report — Settings</title>
+  <style>
+    :root {
+      --surface:    #fcfcfb;
+      --surface-alt:#f0efec;
+      --text-pri:   #0b0b0b;
+      --text-sec:   #52514e;
+      --text-muted: #898781;
+      --accent:     #2a78d6;
+      --sep:        #e1e0d9;
+      --radius:     8px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface:    #1a1a19;
+        --surface-alt:#2c2c2a;
+        --text-pri:   #ffffff;
+        --text-sec:   #c3c2b7;
+        --text-muted: #898781;
+        --accent:     #3987e5;
+        --sep:        #2c2c2a;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--surface);
+      color: var(--text-pri);
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 40px 24px;
+      max-width: 520px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    .card {
+      background: var(--surface-alt);
+      border-radius: var(--radius);
+      padding: 4px 0;
+      margin-bottom: 24px;
+    }
+    .option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--sep);
+      cursor: pointer;
+    }
+    .option:last-child { border-bottom: none; }
+    .option:hover { background: rgba(0,0,0,0.03); }
+    @media (prefers-color-scheme: dark) {
+      .option:hover { background: rgba(255,255,255,0.04); }
+    }
+    .option input[type="radio"] {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .option-text { display: flex; flex-direction: column; }
+    .option-label { font-weight: 500; font-size: 14px; }
+    .option-desc { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .save-btn {
+      padding: 9px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.1s;
+    }
+    .save-btn:hover { opacity: 0.88; }
+    .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>Settings</h1>
+  <p class="subtitle">Prompt Report — Claude.ai usage tracker</p>
+
+  <div class="section-label">Rolling window</div>
+  <div class="card">
+    <label class="option">
+      <input type="radio" name="windowDays" value="7">
+      <span class="option-text">
+        <span class="option-label">Last 7 days</span>
+        <span class="option-desc">One week of history</span>
+      </span>
+    </label>
+    <label class="option">
+      <input type="radio" name="windowDays" value="30">
+      <span class="option-text">
+        <span class="option-label">Last 30 days</span>
+        <span class="option-desc">Default — one month of history</span>
+      </span>
+    </label>
+    <label class="option">
+      <input type="radio" name="windowDays" value="90">
+      <span class="option-text">
+        <span class="option-label">Last 90 days</span>
+        <span class="option-desc">Three months of history</span>
+      </span>
+    </label>
+  </div>
+
+  <button class="save-btn" id="saveBtn">Save</button>
+  <script src="options.js"></script>
+</body>
+</html>
