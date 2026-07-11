@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Prompt Report</title>
+  <style>
+    :root {
+      --surface:     #fcfcfb;
+      --surface-alt: #f0efec;
+      --text-pri:    #0b0b0b;
+      --text-sec:    #52514e;
+      --text-muted:  #898781;
+      --accent:      #2a78d6;
+      --sep:         #e1e0d9;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface:     #1a1a19;
+        --surface-alt: #2c2c2a;
+        --text-pri:    #ffffff;
+        --text-sec:    #c3c2b7;
+        --text-muted:  #898781;
+        --accent:      #3987e5;
+        --sep:         #2c2c2a;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--surface);
+      color: var(--text-pri);
+      width: 272px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 14px 11px;
+      border-bottom: 1px solid var(--sep);
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .settings-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 15px;
+      cursor: pointer;
+      padding: 2px 3px;
+      border-radius: 4px;
+      line-height: 1;
+      transition: color 0.1s;
+    }
+    .settings-btn:hover { color: var(--text-pri); }
+    .period {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 8px 14px 2px;
+      letter-spacing: 0.01em;
+    }
+    .stats {
+      padding: 2px 14px 10px;
+    }
+    .empty {
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 10px 0 6px;
+      text-align: center;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--sep);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--text-sec); }
+    .stat-value { font-variant-numeric: tabular-nums; font-size: 13px; }
+    .stat-row.total .stat-label,
+    .stat-row.total .stat-value { font-weight: 600; }
+    .stat-row.total .stat-value { color: var(--accent); }
+    .actions {
+      display: flex;
+      gap: 8px;
+      padding: 2px 14px 14px;
+    }
+    .report-btn {
+      flex: 1;
+      padding: 8px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.1s;
+    }
+    .report-btn:hover { opacity: 0.88; }
+    .reset-btn {
+      padding: 8px 12px;
+      background: none;
+      color: var(--text-muted);
+      border: 1px solid var(--sep);
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: color 0.1s, border-color 0.1s;
+      white-space: nowrap;
+    }
+    .reset-btn:hover { color: #c0392b; border-color: #c0392b; }
+    @media (prefers-color-scheme: dark) {
+      .reset-btn:hover { color: #e66767; border-color: #e66767; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="title">Prompt Report</span>
+    <button class="settings-btn" id="settingsBtn" title="Settings">⚙</button>
+  </div>
+  <div class="period" id="period">Last 30 days</div>
+  <div class="stats" id="stats">
+    <div class="empty">Loading…</div>
+  </div>
+  <div class="actions">
+    <button class="report-btn" id="reportBtn">View Full Report</button>
+    <button class="reset-btn" id="resetBtn" title="Clear all data">Reset</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

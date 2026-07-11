@@ -1,0 +1,11 @@
+# Claude Code session data (contains local paths and session metadata)
+.claude/
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor folders
+.vscode/
+.idea/
