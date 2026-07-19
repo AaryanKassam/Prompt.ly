@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session as DbSession
 from ..db import get_session
 from ..ingestion.store import score_and_attach
 from ..ml.features import extract_signals
+from ..ml.trainer import build_dataset, train
 from ..models import Prompt, Score
 
 router = APIRouter(prefix="/api/scores", tags=["scores"])
@@ -51,3 +52,25 @@ def rescore_all(db: DbSession = Depends(get_session)) -> dict:
         count += 1
     db.commit()
     return {"rescored": count}
+
+
+@router.get("/train/status")
+def training_status(db: DbSession = Depends(get_session)) -> dict:
+    """How many labeled examples exist, and whether training can run yet."""
+    from ..ml.trainer import MIN_TRAINING_EXAMPLES
+
+    n = len(build_dataset(db))
+    return {
+        "examples": n,
+        "min_required": MIN_TRAINING_EXAMPLES,
+        "ready": n >= MIN_TRAINING_EXAMPLES,
+    }
+
+
+@router.post("/retrain")
+def retrain(db: DbSession = Depends(get_session)) -> dict:
+    """Train the Phase 2 MLP on current data (needs the optional ML deps)."""
+    try:
+        return train(db)
+    except Exception as e:  # missing torch/sentence-transformers, etc.
+        raise HTTPException(status_code=503, detail=f"training unavailable: {e}")

@@ -10,5 +10,11 @@ psycopg2-binary
 # Config
 python-dotenv
 
-# ML / scoring dependencies come online in later phases:
-# sentence-transformers, torch, scikit-learn, faiss-cpu, alembic
+# --- Optional ML deps (Phase 5 MLP scorer) ---
+# The backend runs without these; they're only needed to train/run the MLP.
+# Install with: pip install sentence-transformers torch numpy
+# sentence-transformers
+# torch
+# numpy
+# faiss-cpu   # Phase 6 vector search
+# alembic     # Phase 3+ Postgres migrations

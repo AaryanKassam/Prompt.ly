@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Track prompt counts and token usage on Claude.ai",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://claude.ai/*"],
+  "host_permissions": ["https://claude.ai/*", "http://localhost:8000/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

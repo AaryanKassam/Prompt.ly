@@ -72,12 +72,30 @@
     @media (prefers-color-scheme: dark) {
       .option:hover { background: rgba(255,255,255,0.04); }
     }
-    .option input[type="radio"] {
+    .option input[type="radio"],
+    .option input[type="checkbox"] {
       accent-color: var(--accent);
       width: 16px;
       height: 16px;
       margin: 0;
       flex-shrink: 0;
+    }
+    .text-input {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--surface-alt);
+      color: var(--text-pri);
+      border: 1px solid var(--sep);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      margin-bottom: 24px;
+    }
+    .privacy-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: -14px 0 24px;
+      line-height: 1.5;
     }
     .option-text { display: flex; flex-direction: column; }
     .option-label { font-weight: 500; font-size: 14px; }
@@ -126,6 +144,34 @@
       </span>
     </label>
   </div>
+
+  <div class="section-label">Prompt text capture</div>
+  <div class="card">
+    <label class="option">
+      <input type="checkbox" id="captureText">
+      <span class="option-text">
+        <span class="option-label">Capture prompt &amp; response text</span>
+        <span class="option-desc">Required for ML quality scoring</span>
+      </span>
+    </label>
+  </div>
+  <p class="privacy-note">
+    Off by default. When enabled, the actual text of your prompts and Claude's
+    replies is stored locally and sent to your Prompt.ly backend (if running) so
+    it can be scored. Everything stays on your own machine.
+  </p>
+
+  <div class="section-label">Backend</div>
+  <div class="card">
+    <label class="option">
+      <input type="checkbox" id="backendEnabled">
+      <span class="option-text">
+        <span class="option-label">Send data to Prompt.ly backend</span>
+        <span class="option-desc">Mirrors captured turns to the dashboard API</span>
+      </span>
+    </label>
+  </div>
+  <input type="text" id="backendUrl" class="text-input" placeholder="http://localhost:8000">
 
   <button class="save-btn" id="saveBtn">Save</button>
   <script src="options.js"></script>

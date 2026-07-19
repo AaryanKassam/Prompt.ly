@@ -247,3 +247,20 @@ def extract_signals(text: str) -> dict[str, dict[str, bool]]:
         factor: {name: bool(fn(text)) for name, fn in signals.items()}
         for factor, signals in SIGNALS.items()
     }
+
+
+# Stable, ordered list of every signal name (used to build a fixed-width vector).
+SIGNAL_NAMES: list[str] = [
+    f"{factor}.{name}" for factor, signals in SIGNALS.items() for name in signals
+]
+STRUCTURAL_DIM = len(SIGNAL_NAMES)
+
+
+def signal_vector(text: str) -> list[float]:
+    """Flatten all signals into a fixed-length 0/1 vector (the MLP's structural half)."""
+    results = extract_signals(text)
+    return [
+        1.0 if results[factor][name] else 0.0
+        for factor, signals in SIGNALS.items()
+        for name in signals
+    ]

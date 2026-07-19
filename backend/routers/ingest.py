@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from ..db import get_session
 from ..ingestion.jsonl_parser import parse_all
-from ..ingestion.store import ImportResult, upsert_session
+from ..ingestion.store import ImportResult, score_and_attach, upsert_session
 from ..models import Prompt, Session
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
@@ -77,6 +77,11 @@ def ingest_browser(payload: BrowserIngest, db: DbSession = Depends(get_session))
     prompt.input_tokens = payload.input_tokens if payload.input_tokens is not None else prompt.input_tokens
     prompt.output_tokens = payload.output_tokens if payload.output_tokens is not None else prompt.output_tokens
     prompt.timestamp = payload.timestamp or prompt.timestamp
+
+    db.flush()
+    # Score now that we have (possibly opt-in) text; re-scores on updates.
+    if prompt.text:
+        score_and_attach(db, prompt)
 
     db.commit()
     db.refresh(prompt)
