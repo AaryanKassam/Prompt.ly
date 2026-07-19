@@ -43,7 +43,7 @@ def main() -> int:
 
     print(
         f"Done. sessions: +{result.sessions_created} new, {result.sessions_updated} updated; "
-        f"prompts: +{result.prompts_created} new."
+        f"prompts: +{result.prompts_created} new, {result.prompts_scored} scored."
     )
     return 0
 

@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from ..models import Prompt, Session
+from ..ml.rubric import score_prompt
+from ..models import Prompt, Score, Session
 from .jsonl_parser import ParsedSession
 
 
@@ -15,6 +16,19 @@ class ImportResult:
     sessions_created: int = 0
     sessions_updated: int = 0
     prompts_created: int = 0
+    prompts_scored: int = 0
+
+
+def score_and_attach(db: DbSession, prompt: Prompt) -> Score:
+    """Run the rubric scorer on a prompt and attach a Score row (replacing any)."""
+    result = score_prompt(prompt.text or "")
+    if prompt.score is not None:
+        db.delete(prompt.score)
+        db.flush()
+    score = Score(**result.as_score_kwargs())
+    prompt.score = score  # set the relationship so it's consistent in-session
+    db.add(score)
+    return score
 
 
 def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -> None:
@@ -51,19 +65,21 @@ def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -
     for p in parsed.prompts:
         if p.turn_index in existing_turns:
             continue
-        db.add(
-            Prompt(
-                session_id=session.id,
-                turn_index=p.turn_index,
-                text=p.text,
-                response_text=p.response_text or None,
-                message_id=p.message_id,
-                model=p.model,
-                input_tokens=p.input_tokens or None,
-                output_tokens=p.output_tokens or None,
-                timestamp=p.timestamp,
-                tool_calls=p.tool_calls or None,
-                file_diffs=p.file_diffs(),
-            )
+        prompt = Prompt(
+            session_id=session.id,
+            turn_index=p.turn_index,
+            text=p.text,
+            response_text=p.response_text or None,
+            message_id=p.message_id,
+            model=p.model,
+            input_tokens=p.input_tokens or None,
+            output_tokens=p.output_tokens or None,
+            timestamp=p.timestamp,
+            tool_calls=p.tool_calls or None,
+            file_diffs=p.file_diffs(),
         )
+        db.add(prompt)
+        db.flush()  # assign prompt.id before scoring
+        score_and_attach(db, prompt)
         result.prompts_created += 1
+        result.prompts_scored += 1
