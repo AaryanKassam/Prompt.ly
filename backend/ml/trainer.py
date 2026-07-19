@@ -138,4 +138,9 @@ def train(db: DbSession, epochs: int = 200, seed: int = 42) -> dict:
     }
     (WEIGHTS_DIR / f"model_v{version}.json").write_text(json.dumps(meta, indent=2))
 
+    # Make the freshly trained model active for subsequent scoring.
+    from .scorer import reset_model_cache
+
+    reset_model_cache()
+
     return {"trained": True, "weights": str(weights_path), **meta}

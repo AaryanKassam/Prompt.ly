@@ -56,7 +56,8 @@ export default function PromptPage({ params }: { params: { id: string } }) {
       {p.score && (
         <section className="mt-6">
           <h2 className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
-            Score breakdown · phase {p.score.model_phase} (rubric)
+            Score breakdown · scored by{" "}
+            {p.score.model_phase >= 2 ? "ML model (MLP + rubric blend)" : "rubric"}
           </h2>
           <div className="rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
             <ScoreBreakdown factors={p.score.factors} />

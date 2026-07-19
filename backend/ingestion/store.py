@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from ..ml.rubric import score_prompt
+from ..ml.scorer import score as score_text
 from ..models import Prompt, Score, Session
 from .jsonl_parser import ParsedSession
 
@@ -21,7 +21,7 @@ class ImportResult:
 
 def score_and_attach(db: DbSession, prompt: Prompt) -> Score:
     """Run the rubric scorer on a prompt and attach a Score row (replacing any)."""
-    result = score_prompt(prompt.text or "")
+    result = score_text(prompt.text or "")
     if prompt.score is not None:
         db.delete(prompt.score)
         db.flush()
