@@ -9,3 +9,13 @@ desktop.ini
 # Editor folders
 .vscode/
 .idea/
+
+# Python backend
+backend/venv/
+__pycache__/
+*.pyc
+.env
+
+# Local database (dev SQLite)
+*.db
+

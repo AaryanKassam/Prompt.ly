@@ -1,0 +1,14 @@
+# Web framework (added in Phase 1 step 5)
+fastapi
+uvicorn[standard]
+
+# Database
+SQLAlchemy>=2.0
+# Postgres driver (used when DATABASE_URL points at postgres; SQLite needs nothing)
+psycopg2-binary
+
+# Config
+python-dotenv
+
+# ML / scoring dependencies come online in later phases:
+# sentence-transformers, torch, scikit-learn, faiss-cpu, alembic
