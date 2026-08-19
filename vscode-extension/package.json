@@ -1,0 +1,99 @@
+{
+  "name": "promptly",
+  "displayName": "Prompt.ly",
+  "description": "Scores how effectively you prompt Claude, for the folder you have open.",
+  "version": "1.0.0",
+  "publisher": "aaryankassam",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AaryanKassam/Prompt.ly"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["claude", "prompt", "analytics", "ai"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "promptly",
+          "title": "Prompt.ly",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "promptly": [
+        {
+          "type": "webview",
+          "id": "promptly.report",
+          "name": "Prompt report"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "promptly.refresh",
+        "title": "Prompt.ly: Refresh report",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "promptly.scoreSelection",
+        "title": "Prompt.ly: Score selected text as a prompt"
+      },
+      {
+        "command": "promptly.openDashboard",
+        "title": "Prompt.ly: Open dashboard in browser"
+      },
+      {
+        "command": "promptly.sync",
+        "title": "Prompt.ly: Import latest Claude Code sessions"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "promptly.refresh",
+          "when": "view == promptly.report",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "promptly.scoreSelection",
+          "when": "editorHasSelection",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Prompt.ly",
+      "properties": {
+        "promptly.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the `promptly` launcher (repo scripts/promptly). Leave blank to auto-detect."
+        },
+        "promptly.dashboardUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Where the Prompt.ly web dashboard is served."
+        },
+        "promptly.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show this project's prompt score in the status bar."
+        },
+        "promptly.autoRefreshSeconds": {
+          "type": "number",
+          "default": 120,
+          "description": "How often to refresh the report while the view is open. 0 disables."
+        }
+      }
+    }
+  }
+}

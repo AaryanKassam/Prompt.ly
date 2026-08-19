@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "promptly": {
+      "command": "/Users/aaryankassam/prompt.ly/backend/venv/bin/python",
+      "args": [
+        "/Users/aaryankassam/prompt.ly/mcp_server/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/aaryankassam/prompt.ly"
+      }
+    }
+  }
+}

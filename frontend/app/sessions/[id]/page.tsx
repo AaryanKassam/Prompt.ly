@@ -1,82 +1,114 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, SessionDetail } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useQuery } from "@/lib/useQuery";
 import ScoreBadge from "@/components/ScoreBadge";
+import { CardListSkeleton, EmptyState, ErrorState, Skeleton } from "@/components/states";
+import { ArrowLeftIcon } from "@/components/icons";
 
 function diffLabel(d: { created: number; edited: number; deleted: number }) {
   const parts: string[] = [];
-  if (d.created) parts.push(`${d.created} created`);
-  if (d.edited) parts.push(`${d.edited} edited`);
-  if (d.deleted) parts.push(`${d.deleted} deleted`);
-  return parts.join(" · ");
+  if (d.created) parts.push(`+${d.created}`);
+  if (d.edited) parts.push(`~${d.edited}`);
+  if (d.deleted) parts.push(`-${d.deleted}`);
+  return parts.join(" ");
 }
 
 export default function SessionPage({ params }: { params: { id: string } }) {
-  const [data, setData] = useState<SessionDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const session = useQuery(`session:${params.id}`, () => api.session(params.id), {
+    staleMs: 60_000,
+  });
 
-  useEffect(() => {
-    api.session(params.id).then(setData).catch((e) => setError(String(e)));
-  }, [params.id]);
+  if (session.error) {
+    return <ErrorState error={session.error} onRetry={() => session.refetch(true)} />;
+  }
 
-  if (error) return <div className="text-red-400">{error}</div>;
-  if (!data) return <div className="text-neutral-500">Loading…</div>;
+  const data = session.data;
 
   return (
-    <div>
-      <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-300">
-        ← All sessions
+    <div className="animate-fade-up space-y-6">
+      <Link
+        href="/sessions"
+        className="inline-flex items-center gap-1.5 text-sm text-content-subtle
+                   transition-colors duration-200 ease-expo hover:text-content"
+      >
+        <ArrowLeftIcon width={15} height={15} />
+        All sessions
       </Link>
-      <div className="mt-3 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">{data.title}</h1>
-          {data.project_path && (
-            <div className="text-xs text-neutral-500 mt-1 font-mono">
-              {data.project_path}
+
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          {data ? (
+            <>
+              <h1 className="text-xl font-semibold tracking-tight">{data.title}</h1>
+              {data.project_path && (
+                <Link
+                  href={`/projects/report?path=${encodeURIComponent(data.project_path)}`}
+                  className="mt-1 inline-block truncate font-mono text-2xs text-content-subtle
+                             transition-colors duration-200 ease-expo hover:text-accent"
+                >
+                  {data.project_path}
+                </Link>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-64" />
+              <Skeleton className="h-3 w-40" />
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-neutral-500">session avg</span>
-          <ScoreBadge score={data.avg_score} />
-        </div>
-      </div>
+        {data && (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="eyebrow">session avg</span>
+            <ScoreBadge score={data.avg_score} />
+          </div>
+        )}
+      </header>
 
-      <ol className="mt-6 space-y-3">
-        {data.prompts.map((p) => (
-          <li key={p.id}>
-            <Link
-              href={`/prompts/${p.id}`}
-              className="block rounded-lg border border-neutral-800 bg-neutral-900/50 p-4 hover:border-neutral-700 hover:bg-neutral-900 transition"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-xs text-neutral-500 mb-1">
-                    Turn {p.turn_index}
+      {session.isLoading ? (
+        <CardListSkeleton rows={5} />
+      ) : !data?.prompts.length ? (
+        <EmptyState
+          title="No prompts in this session"
+          description="The session was recorded but contains no user turns."
+        />
+      ) : (
+        <ol className="space-y-2">
+          {data.prompts.map((p) => (
+            <li key={p.id}>
+              <Link
+                href={`/prompts/${p.id}`}
+                className="card-interactive block p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="eyebrow mb-1.5">Turn {p.turn_index}</div>
+                    <p className="line-clamp-2 text-sm leading-relaxed">
+                      {p.text_preview || (
+                        <span className="italic text-content-faint">
+                          (no text captured)
+                        </span>
+                      )}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-3 text-2xs text-content-subtle">
+                      {p.tool_count > 0 && <span>{p.tool_count} tool calls</span>}
+                      {diffLabel(p.diffs) && (
+                        <span className="font-mono">{diffLabel(p.diffs)} files</span>
+                      )}
+                      {p.output_tokens != null && (
+                        <span>{p.output_tokens.toLocaleString()} out tokens</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm text-neutral-200 line-clamp-2">
-                    {p.text_preview || (
-                      <span className="italic text-neutral-600">
-                        (no text captured)
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-neutral-500 mt-2 flex flex-wrap gap-3">
-                    {p.tool_count > 0 && <span>{p.tool_count} tool calls</span>}
-                    {diffLabel(p.diffs) && <span>{diffLabel(p.diffs)}</span>}
-                    {p.output_tokens != null && (
-                      <span>{p.output_tokens.toLocaleString()} out tokens</span>
-                    )}
-                  </div>
+                  <ScoreBadge score={p.overall} size="sm" />
                 </div>
-                <ScoreBadge score={p.overall} />
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ol>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

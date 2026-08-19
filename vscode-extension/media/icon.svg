@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+     stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Activity-bar icons are masked to a single colour, so this is stroke-only. -->
+  <path d="M4 19V9" />
+  <path d="M10 19V5" />
+  <path d="M16 19v-7" />
+  <path d="M22 19V8" />
+</svg>

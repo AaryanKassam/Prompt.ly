@@ -110,6 +110,27 @@ class Score(Base):
     prompt: Mapped["Prompt"] = relationship(back_populates="score")
 
 
+class ReportCache(Base):
+    """Memoized per-project report payloads.
+
+    A report aggregates every prompt in a folder, so regenerating it on each
+    request would rescan the whole project. The fingerprint captures what the
+    report was built from (prompt count + newest prompt); when it still matches
+    the database, the stored payload is served untouched.
+    """
+
+    __tablename__ = "report_cache"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    project_path: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
+
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class Annotation(Base):
     """User-added notes and tags."""
 

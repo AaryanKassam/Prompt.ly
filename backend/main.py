@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
-from .routers import ingest, prompts, scores, sessions
+from .routers import ingest, projects, prompts, scores, sessions
 
 app = FastAPI(title="Prompt.ly API", version="0.1.0")
 
@@ -26,6 +26,7 @@ app.include_router(ingest.router)
 app.include_router(scores.router)
 app.include_router(sessions.router)
 app.include_router(prompts.router)
+app.include_router(projects.router)
 
 
 @app.on_event("startup")

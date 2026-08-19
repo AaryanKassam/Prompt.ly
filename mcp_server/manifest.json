@@ -1,0 +1,65 @@
+{
+  "manifest_version": "0.2",
+  "name": "promptly",
+  "display_name": "Prompt.ly",
+  "version": "1.0.0",
+  "description": "Scores how effectively you prompt Claude, per project folder.",
+  "long_description": "Prompt.ly reads the Claude Code session logs already on your machine, scores every prompt 0-10 across clarity, specificity, context, constraints, scope and examples, and reports how you're doing in whichever folder you have open in VS Code. Reports are cached, so re-opening a project is instant. Nothing leaves your machine.",
+  "author": {
+    "name": "Aaryan Kassam",
+    "url": "https://github.com/AaryanKassam/Prompt.ly"
+  },
+  "homepage": "https://github.com/AaryanKassam/Prompt.ly",
+  "documentation": "https://github.com/AaryanKassam/Prompt.ly#readme",
+  "icon": "icon.png",
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "python3",
+      "args": ["${__dirname}/server.py"],
+      "env": {
+        "PYTHONPATH": "${__dirname}/.."
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "prompt_report",
+      "description": "Prompt-quality report for the project folder open in your editor."
+    },
+    {
+      "name": "score_draft_prompt",
+      "description": "Score a draft prompt 0-10 with concrete suggestions before you send it."
+    },
+    {
+      "name": "detect_workspace",
+      "description": "Show which folders are open in VS Code / Cursor."
+    },
+    {
+      "name": "list_tracked_projects",
+      "description": "List every project Prompt.ly has recorded prompts for."
+    },
+    {
+      "name": "refresh_data",
+      "description": "Re-read Claude Code logs and rebuild the report."
+    }
+  ],
+  "keywords": ["prompt", "analytics", "scoring", "productivity", "developer-tools"],
+  "license": "MIT",
+  "user_config": {
+    "workspace_override": {
+      "type": "directory",
+      "title": "Default project folder",
+      "description": "Optional. When set, reports always target this folder instead of auto-detecting the one open in VS Code.",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}

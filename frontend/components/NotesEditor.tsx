@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { CheckIcon } from "./icons";
 
+/**
+ * Note + tag editor with an optimistic save.
+ *
+ * Saving a note succeeds essentially always, so the UI commits immediately and
+ * only surfaces a failure if the request actually rejects — the button never
+ * blocks on the round trip. The success marker clears itself after a moment.
+ */
 export default function NotesEditor({
   promptId,
   initialNote,
@@ -14,54 +22,74 @@ export default function NotesEditor({
 }) {
   const [note, setNote] = useState(initialNote ?? "");
   const [tags, setTags] = useState((initialTags ?? []).join(", "));
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   async function save() {
-    setStatus("saving");
+    // Commit optimistically, then reconcile.
+    setStatus("saved");
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setStatus("idle"), 2000);
+
     try {
       await api.saveAnnotation(promptId, {
         note,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
       });
-      setStatus("saved");
-      setTimeout(() => setStatus("idle"), 1500);
     } catch {
+      clearTimeout(timer.current);
       setStatus("error");
     }
   }
 
+  const field =
+    "w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm " +
+    "placeholder:text-content-faint transition-colors duration-200 ease-expo " +
+    "focus:border-accent-ring focus:outline-none";
+
   return (
-    <div className="space-y-3">
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="Add a note about this prompt…"
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-sm focus:outline-none focus:ring-1 focus:ring-brand min-h-24"
-      />
-      <input
-        value={tags}
-        onChange={(e) => setTags(e.target.value)}
-        placeholder="tags, comma, separated"
-        className="w-full rounded-lg bg-neutral-900 border border-neutral-800 p-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand"
-      />
+    <div className="space-y-2.5">
+      <label className="block">
+        <span className="sr-only">Note</span>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="What made this prompt work, or not?"
+          className={`${field} min-h-24 resize-y leading-relaxed`}
+        />
+      </label>
+
+      <label className="block">
+        <span className="sr-only">Tags</span>
+        <input
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder="tags, comma, separated"
+          className={field}
+        />
+      </label>
+
       <div className="flex items-center gap-3">
         <button
           onClick={save}
-          disabled={status === "saving"}
-          className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          className="h-11 rounded-md bg-accent px-4 text-sm font-medium text-canvas
+                     transition-colors duration-200 ease-expo hover:bg-accent-hover"
         >
-          {status === "saving" ? "Saving…" : "Save note"}
+          Save note
         </button>
+
         {status === "saved" && (
-          <span className="text-sm text-emerald-400">Saved ✓</span>
+          <span className="inline-flex items-center gap-1.5 text-sm text-accent">
+            <CheckIcon width={15} height={15} />
+            Saved
+          </span>
         )}
         {status === "error" && (
-          <span className="text-sm text-red-400">Failed to save</span>
+          <span className="text-sm text-score-low">
+            Couldn&apos;t save — is the backend running?
+          </span>
         )}
       </div>
     </div>

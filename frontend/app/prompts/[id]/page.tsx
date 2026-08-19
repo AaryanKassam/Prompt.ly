@@ -1,106 +1,189 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, PromptDetail } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useQuery } from "@/lib/useQuery";
 import ScoreBadge from "@/components/ScoreBadge";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import NotesEditor from "@/components/NotesEditor";
+import { CardListSkeleton, ErrorState, Skeleton } from "@/components/states";
+import { ArrowLeftIcon, CheckIcon } from "@/components/icons";
 
-function fileList(files: string[]) {
-  return files.map((f) => f.split("/").slice(-2).join("/"));
+/** Show enough path to disambiguate without wrapping. */
+function shortPath(f: string) {
+  return f.split("/").slice(-2).join("/");
 }
 
+const SIGNAL_LABELS: Record<string, string> = {
+  single_imperative_verb: "opens with one action verb",
+  no_passive_voice: "active voice",
+  no_hedge_words: "no hedging",
+  sentence_count_le_5: "5 sentences or fewer",
+  mentions_file_or_line: "names a file or line",
+  names_exact_function_class: "names exact identifiers",
+  has_concrete_output_format: "states output format",
+  no_vague_quantifiers: "no vague quantifiers",
+  references_prior_turn: "anchors to prior turn",
+  provides_background_why: "explains why",
+  mentions_tech_stack: "names the stack",
+  has_negative_constraint: "says what not to do",
+  specifies_scope_limit: "bounds the scope",
+  single_task_focus: "one task",
+  no_compound_and_also: "no compound asks",
+  task_size_appropriate: "right size",
+  has_code_block: "includes code",
+  has_before_after: "shows before/after",
+  has_inline_example: "gives an example",
+};
+
 export default function PromptPage({ params }: { params: { id: string } }) {
-  const [p, setP] = useState<PromptDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const prompt = useQuery(`prompt:${params.id}`, () => api.prompt(params.id), {
+    staleMs: 60_000,
+  });
 
-  useEffect(() => {
-    api.prompt(params.id).then(setP).catch((e) => setError(String(e)));
-  }, [params.id]);
+  if (prompt.error) {
+    return <ErrorState error={prompt.error} onRetry={() => prompt.refetch(true)} />;
+  }
 
-  if (error) return <div className="text-red-400">{error}</div>;
-  if (!p) return <div className="text-neutral-500">Loading…</div>;
+  const p = prompt.data;
+
+  if (!p) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-24 w-full" />
+        <CardListSkeleton rows={2} />
+      </div>
+    );
+  }
 
   const diffs = p.file_diffs;
   const hasDiffs =
     diffs.created.length || diffs.edited.length || diffs.deleted.length;
 
+  // Flatten the signal map so met/missed can be listed side by side.
+  const signalEntries = Object.entries(p.signals ?? {}).flatMap(
+    ([factor, sigs]) =>
+      Object.entries(sigs).map(([name, met]) => ({ factor, name, met })),
+  );
+  const met = signalEntries.filter((s) => s.met);
+  const missed = signalEntries.filter((s) => !s.met);
+
   return (
-    <div>
+    <div className="animate-fade-up space-y-6">
       <Link
         href={`/sessions/${p.session_id}`}
-        className="text-sm text-neutral-500 hover:text-neutral-300"
+        className="inline-flex items-center gap-1.5 text-sm text-content-subtle
+                   transition-colors duration-200 ease-expo hover:text-content"
       >
-        ← Back to session
+        <ArrowLeftIcon width={15} height={15} />
+        Back to session
       </Link>
 
-      <div className="mt-3 flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">Turn {p.turn_index}</h1>
-        <ScoreBadge score={p.score?.overall ?? null} />
-      </div>
+      <header className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Turn {p.turn_index}
+          </h1>
+          <p className="mt-1 text-2xs text-content-subtle">
+            {p.model ?? "unknown model"}
+            {p.timestamp && ` · ${new Date(p.timestamp).toLocaleString()}`}
+          </p>
+        </div>
+        <ScoreBadge score={p.score?.overall ?? null} size="lg" />
+      </header>
 
-      {/* Prompt text */}
-      <section className="mt-5">
-        <h2 className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-          Prompt
-        </h2>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900/50 p-4 text-sm whitespace-pre-wrap">
+      <section>
+        <h2 className="eyebrow mb-2">Prompt</h2>
+        <div className="card whitespace-pre-wrap p-4 text-sm leading-relaxed">
           {p.text || (
-            <span className="italic text-neutral-600">(no text captured)</span>
+            <span className="italic text-content-faint">(no text captured)</span>
           )}
         </div>
       </section>
 
-      {/* Score breakdown */}
       {p.score && (
-        <section className="mt-6">
-          <h2 className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
-            Score breakdown · scored by{" "}
-            {p.score.model_phase >= 2 ? "ML model (MLP + rubric blend)" : "rubric"}
-          </h2>
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900/50 p-4">
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="eyebrow">Score breakdown</h2>
+            <span className="text-2xs text-content-subtle">
+              scored by{" "}
+              {p.score.model_phase >= 2
+                ? "ML model (MLP + rubric blend)"
+                : "rubric"}
+            </span>
+          </div>
+          <div className="card p-5">
             <ScoreBreakdown factors={p.score.factors} />
           </div>
         </section>
       )}
 
-      {/* What Claude did */}
-      <section className="mt-6">
-        <h2 className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-          What Claude did
-        </h2>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900/50 p-4 text-sm space-y-2">
-          <div className="text-neutral-400">
+      {signalEntries.length > 0 && (
+        <section>
+          <h2 className="eyebrow mb-3">
+            Signals · {met.length} of {signalEntries.length} met
+          </h2>
+          <div className="card grid gap-x-6 gap-y-1.5 p-4 sm:grid-cols-2">
+            {[...met, ...missed].map((s) => (
+              <div
+                key={`${s.factor}.${s.name}`}
+                className={`flex items-center gap-2 text-sm ${
+                  s.met ? "text-content-muted" : "text-content-faint"
+                }`}
+              >
+                {s.met ? (
+                  <CheckIcon width={14} height={14} className="shrink-0 text-accent" />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="h-3.5 w-3.5 shrink-0 rounded-full border border-line-strong"
+                  />
+                )}
+                <span className={s.met ? "" : "line-through decoration-line-strong"}>
+                  {SIGNAL_LABELS[s.name] ?? s.name.replace(/_/g, " ")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h2 className="eyebrow mb-2">What Claude did</h2>
+        <div className="card space-y-3 p-4 text-sm">
+          <div className="text-content-muted">
             {p.tool_calls.length} tool call
             {p.tool_calls.length !== 1 ? "s" : ""}
             {p.output_tokens != null &&
               ` · ${p.output_tokens.toLocaleString()} output tokens`}
-            {p.model && ` · ${p.model}`}
           </div>
           {hasDiffs ? (
-            <div className="space-y-1 font-mono text-xs">
-              {fileList(diffs.created).map((f) => (
-                <div key={f} className="text-emerald-400">+ {f}</div>
+            <div className="space-y-1 font-mono text-2xs">
+              {diffs.created.map((f) => (
+                <div key={`c${f}`} className="text-score-high">
+                  + {shortPath(f)}
+                </div>
               ))}
-              {fileList(diffs.edited).map((f) => (
-                <div key={f} className="text-amber-400">~ {f}</div>
+              {diffs.edited.map((f) => (
+                <div key={`e${f}`} className="text-score-mid">
+                  ~ {shortPath(f)}
+                </div>
               ))}
-              {fileList(diffs.deleted).map((f) => (
-                <div key={f} className="text-red-400">- {f}</div>
+              {diffs.deleted.map((f) => (
+                <div key={`d${f}`} className="text-score-low">
+                  - {shortPath(f)}
+                </div>
               ))}
             </div>
           ) : (
-            <div className="text-neutral-600 italic">No file changes.</div>
+            <div className="italic text-content-faint">No file changes.</div>
           )}
         </div>
       </section>
 
-      {/* Notes */}
-      <section className="mt-6">
-        <h2 className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-          Notes
-        </h2>
+      <section>
+        <h2 className="eyebrow mb-2">Notes</h2>
         <NotesEditor
           promptId={p.id}
           initialNote={p.annotation?.note ?? null}
