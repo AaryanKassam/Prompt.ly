@@ -173,6 +173,27 @@ export interface PromptImprovement {
   rewrite: string;
   slots: number;
   kept_detail: boolean;
+  llm_available: boolean;
+  llm_rewrite?: LLMRewrite;
+  llm_error?: string;
+}
+
+export interface LLMRewrite {
+  rewritten: string;
+  what_changed: string[];
+  assumptions: string[];
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+export interface Playbook {
+  exists?: boolean;
+  llm_available?: boolean;
+  markdown?: string;
+  generated_at?: string;
+  model?: string | null;
+  stale?: boolean;
+  cached?: boolean;
+  usage?: { input_tokens: number | null; output_tokens: number | null };
 }
 
 export interface FactorSignal {
@@ -214,7 +235,17 @@ export const api = {
     post<ProjectReport>(
       `/api/projects/report/refresh${path ? `?path=${encodeURIComponent(path)}` : ""}`,
     ),
-  improve: (id: string) => get<PromptImprovement>(`/api/prompts/${id}/improve`),
+  improve: (id: string, llm = false) =>
+    get<PromptImprovement>(`/api/prompts/${id}/improve${llm ? "?llm=true" : ""}`),
+  playbook: (path?: string) =>
+    get<Playbook>(
+      `/api/projects/playbook${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+    ),
+  generatePlaybook: (path?: string, force = false) =>
+    post<Playbook>(
+      `/api/projects/playbook?force=${force}` +
+        (path ? `&path=${encodeURIComponent(path)}` : ""),
+    ),
   factor: (factor: string, path?: string, limit = 10) =>
     get<FactorEvidence>(
       `/api/projects/factor?factor=${encodeURIComponent(factor)}&limit=${limit}` +

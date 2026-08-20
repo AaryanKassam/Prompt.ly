@@ -81,6 +81,9 @@ def ingest_browser(payload: BrowserIngest, db: DbSession = Depends(get_session))
     db.flush()
     # Score now that we have (possibly opt-in) text; re-scores on updates.
     if prompt.text:
+        # Text may have arrived or changed since the row was created, so the
+        # stored classification is stale — clear it and let scoring redo it.
+        prompt.kind = None
         score_and_attach(db, prompt)
 
     db.commit()

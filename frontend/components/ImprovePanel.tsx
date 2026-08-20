@@ -5,7 +5,7 @@ import { api, PromptImprovement, ReportPromptRef } from "@/lib/api";
 import { useQuery } from "@/lib/useQuery";
 import ScoreBadge from "./ScoreBadge";
 import { Skeleton } from "./states";
-import { CheckIcon } from "./icons";
+import { CheckIcon, SparkIcon } from "./icons";
 
 /**
  * A low-scoring prompt with an "IMP" toggle that explains what went wrong and
@@ -18,19 +18,21 @@ import { CheckIcon } from "./icons";
  */
 export default function ImprovePanel({ prompt }: { prompt: ReportPromptRef }) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  // Asking Claude costs a call, so it is opt-in per prompt rather than
+  // happening automatically when the panel opens.
+  const [wantLLM, setWantLLM] = useState(false);
 
   const { data, isLoading, error } = useQuery<PromptImprovement>(
-    open ? `improve:${prompt.id}` : null,
-    () => api.improve(prompt.id),
+    open ? `improve:${prompt.id}${wantLLM ? ":llm" : ""}` : null,
+    () => api.improve(prompt.id, wantLLM),
     { staleMs: 300_000 },
   );
 
-  async function copy() {
-    if (!data) return;
-    await navigator.clipboard.writeText(data.rewrite);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+  async function copy(text: string, which: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(which);
+    setTimeout(() => setCopied(null), 1800);
   }
 
   return (
@@ -80,12 +82,12 @@ export default function ImprovePanel({ prompt }: { prompt: ReportPromptRef }) {
               <div className="mb-2 mt-4 flex items-center justify-between gap-3">
                 <h4 className="eyebrow">Stronger version</h4>
                 <button
-                  onClick={copy}
+                  onClick={() => copy(data.rewrite, "template")}
                   className="inline-flex items-center gap-1 rounded border border-line-strong
                              px-1.5 py-0.5 text-2xs text-content-muted transition-colors
                              duration-200 ease-expo hover:bg-surface-hover hover:text-content"
                 >
-                  {copied ? (
+                  {copied === "template" ? (
                     <>
                       <CheckIcon width={11} height={11} /> Copied
                     </>
@@ -103,8 +105,83 @@ export default function ImprovePanel({ prompt }: { prompt: ReportPromptRef }) {
               {data.slots > 0 && (
                 <p className="mt-1.5 text-2xs text-content-faint">
                   {data.slots} bracketed slot{data.slots === 1 ? "" : "s"} left for you to
-                  fill — Prompt.ly won&apos;t guess a file path or a reason it doesn&apos;t know.
+                  fill — the template won&apos;t guess a file path or a reason it doesn&apos;t know.
                 </p>
+              )}
+
+              {/* Optional: a full rewrite from Claude. The template above is
+                  always available offline; this is the only LLM call here. */}
+              {data.llm_rewrite ? (
+                <div className="mt-4 border-t border-line pt-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="eyebrow">Rewritten by Claude</h4>
+                    <button
+                      onClick={() => copy(data.llm_rewrite!.rewritten, "llm")}
+                      className="inline-flex items-center gap-1 rounded border border-line-strong
+                                 px-1.5 py-0.5 text-2xs text-content-muted transition-colors
+                                 duration-200 ease-expo hover:bg-surface-hover hover:text-content"
+                    >
+                      {copied === "llm" ? (
+                        <>
+                          <CheckIcon width={11} height={11} /> Copied
+                        </>
+                      ) : (
+                        "Copy"
+                      )}
+                    </button>
+                  </div>
+                  <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border
+                                  border-accent-ring/40 bg-surface-raised p-3 font-mono
+                                  text-2xs leading-relaxed text-content">
+                    {data.llm_rewrite.rewritten}
+                  </pre>
+                  {data.llm_rewrite.what_changed.length > 0 && (
+                    <ul className="mt-2 space-y-0.5">
+                      {data.llm_rewrite.what_changed.map((c) => (
+                        <li key={c} className="flex gap-1.5 text-2xs text-content-muted">
+                          <CheckIcon width={11} height={11} className="mt-0.5 shrink-0 text-accent" />
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {data.llm_rewrite.assumptions.length > 0 && (
+                    <div className="mt-2 rounded bg-score-mid/10 px-2 py-1.5">
+                      <p className="text-2xs font-medium text-score-mid">
+                        Invented — check these before sending:
+                      </p>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {data.llm_rewrite.assumptions.map((a) => (
+                          <li key={a} className="text-2xs text-content-muted">
+                            · {a}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 border-t border-line pt-3">
+                  <button
+                    onClick={() => setWantLLM(true)}
+                    disabled={!data.llm_available || wantLLM}
+                    title={
+                      data.llm_available
+                        ? undefined
+                        : "Set ANTHROPIC_API_KEY and restart the backend"
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md border border-line-strong
+                               px-2.5 py-1.5 text-2xs text-content-muted transition-colors
+                               duration-200 ease-expo hover:bg-surface-hover hover:text-content
+                               disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <SparkIcon width={12} height={12} />
+                    {wantLLM ? "Rewriting…" : "Rewrite with Claude"}
+                  </button>
+                  {data.llm_error && (
+                    <p className="mt-1.5 text-2xs text-score-low">{data.llm_error}</p>
+                  )}
+                </div>
               )}
             </>
           ) : null}

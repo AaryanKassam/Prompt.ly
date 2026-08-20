@@ -8,6 +8,7 @@ import { invalidate, primeCache, useQuery } from "@/lib/useQuery";
 import ScoreBadge from "@/components/ScoreBadge";
 import ExpandableFactors from "@/components/ExpandableFactors";
 import ImprovePanel from "@/components/ImprovePanel";
+import ExecutePanel from "@/components/ExecutePanel";
 import Tooltip from "@/components/Tooltip";
 import { StatTile, TrendPill } from "@/components/StatTile";
 import { CardListSkeleton, EmptyState, ErrorState, StatRowSkeleton } from "@/components/states";
@@ -204,6 +205,10 @@ function ReportView() {
                   </li>
                 ))}
               </ol>
+              <ExecutePanel
+                recommendations={r.recommendations}
+                path={r.project_path}
+              />
             </section>
           )}
 

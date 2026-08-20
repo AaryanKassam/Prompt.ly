@@ -83,6 +83,11 @@ class Prompt(Base):
     # slash-command echoes, IDE events). Only "user" rows are scored/reported.
     kind: Mapped[Optional[str]] = mapped_column(String(24), index=True)
 
+    # Project this turn actually belongs to, inferred from the files it touched.
+    # Overrides the session's cwd, which is wrong whenever Claude Code is
+    # started in one repo and used on another.
+    project_path: Mapped[Optional[str]] = mapped_column(Text, index=True)
+
     session: Mapped["Session"] = relationship(back_populates="prompts")
     score: Mapped[Optional["Score"]] = relationship(
         back_populates="prompt", cascade="all, delete-orphan", uselist=False
@@ -133,6 +138,26 @@ class ReportCache(Base):
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
+
+
+class Playbook(Base):
+    """LLM-generated prompting guide for one project.
+
+    Generation costs an API call, so a playbook is stored and reused until the
+    project's data has moved enough to make it stale.
+    """
+
+    __tablename__ = "playbooks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    project_path: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
+
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String(80))
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Annotation(Base):

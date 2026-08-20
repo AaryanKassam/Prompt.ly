@@ -88,9 +88,19 @@ def upsert_annotation(
 
 
 @router.get("/{prompt_id}/improve")
-def improve_prompt(prompt_id: str, db: DbSession = Depends(get_session)) -> dict:
-    """What's weak about this prompt, plus a stronger draft of it."""
+def improve_prompt(
+    prompt_id: str,
+    llm: bool = False,
+    db: DbSession = Depends(get_session),
+) -> dict:
+    """What's weak about this prompt, plus a stronger draft of it.
+
+    The rule-based analysis and template always run offline. `llm=true`
+    additionally asks Claude for a full rewrite; if that is unavailable or
+    fails, the response still carries the rule-based result and says why.
+    """
     from ..improve import improve
+    from ..llm import LLMUnavailable, available, rewrite_prompt
 
     prompt = db.get(Prompt, prompt_id)
     if prompt is None:
@@ -98,8 +108,18 @@ def improve_prompt(prompt_id: str, db: DbSession = Depends(get_session)) -> dict
     if not (prompt.text or "").strip():
         raise HTTPException(status_code=400, detail="no prompt text captured")
 
-    return {
+    payload = {
         "prompt_id": prompt_id,
         "score": prompt.score.overall if prompt.score else None,
         **improve(prompt.text),
+        "llm_available": available(),
     }
+
+    if llm:
+        try:
+            result = rewrite_prompt(payload["original"], payload["issues"])
+            payload["llm_rewrite"] = result.as_dict()
+        except LLMUnavailable as exc:
+            payload["llm_error"] = str(exc)
+
+    return payload

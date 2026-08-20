@@ -106,7 +106,41 @@ prompt.ly/
 | 5 | ML scaffolding: MLP, trainer, weak labels, retrain endpoint | ✅ Done (9e8e9a0) |
 | MLP wiring | Blend MLP 70% + rubric 30% in unified scorer | ✅ Done (adb9904) |
 | 6 | Claude app extension (MCP) + per-project reports + dashboard redesign | ✅ Done |
-| 7 | FAISS prompt refinement suggestions | 🔜 Not started |
+| 7 | Data correctness, validation, trained MLP, LLM rewrites | ✅ Done |
+| 8 | FAISS prompt refinement suggestions | 🔜 Not started |
+
+---
+
+## Measured results
+
+Run `promptly validate` to reproduce.
+
+**Benchmark** (`backend/fixtures/benchmark.json`) — 20 hand-written pairs, each
+expressing the same request weakly and well. Pairing controls for topic, so the
+number reflects prompt quality rather than subject matter.
+
+| Metric | Value |
+|---|---|
+| Weak mean | 3.48 / 10 |
+| Strong mean | 6.02 / 10 |
+| Separation | **1.73x** |
+| Pairwise accuracy | **20 / 20** |
+| AUC | **0.981** |
+
+**Outcome correlation** — on real prompts, does a higher score predict a better
+outcome? Ground truth comes from the independent outcome signals (repetition,
+iteration count, clarification, diff alignment), so the rubric is not grading its
+own homework. n=52, r=0.36; mean outcome 9.79 in the top half of scores vs 8.05
+in the bottom half.
+
+> The honest headline is **20/20 pairwise, AUC 0.98** — not the ratio. A ratio can
+> look healthy while individual pairs invert; pairwise accuracy cannot.
+
+**Trained MLP** — `model_v1`, 52 clean examples, MAE 0.292, R² 0.948 on an
+11-example validation split. Treat that R² with suspicion: the split is tiny and
+the labels are weak (derived from outcome heuristics), so the model is partly
+learning to reproduce that heuristic. It is **not active in scoring** —
+`BLEND_MIN_EXAMPLES` is 200 and there are 52. Scoring is still pure rubric.
 
 ---
 
@@ -319,6 +353,54 @@ Today everything is local-only. Making scores viewable on a website after login 
 **Privacy decision to make first:** prompt *text* is the sensitive part. Recommended default is to sync scores, factor breakdowns, and signal hit-rates but **not** prompt bodies, with text upload opt-in per project. That keeps the leaderboard/history product working without becoming a data-liability, and mirrors the `captureText` gate the Chrome extension already has.
 
 **Scoring must stay client-side.** It's fast, works offline, and it's the defensible IP — the server should receive scores, not compute them.
+
+---
+
+## Where the language model is used
+
+Exactly two places, both additive garnish over locally-measured numbers:
+
+| Feature | Endpoint | Fallback without a key |
+|---|---|---|
+| Rewrite one weak prompt | `GET /api/prompts/{id}/improve?llm=true` | Rule-based template with bracketed slots |
+| "Execute" playbook | `POST /api/projects/playbook` | Button disabled, recommendations still shown |
+
+Everything else — scoring, signals, recommendations, classification, the
+rule-based rewrite — is deterministic and runs offline.
+
+**Scoring never calls the API.** The scorer is the part of this project worth
+owning; outsourcing it would make the whole thing a wrapper. The model only
+turns already-measured weaknesses into prose and rewrites.
+
+Enable with `export ANTHROPIC_API_KEY=sk-ant-...` and restart the backend.
+Model is `claude-opus-5`. `PROMPTLY_DISABLE_LLM=1` forces the offline path.
+Playbooks are cached in the `playbooks` table and regenerate only when the
+project's data has moved.
+
+Rewrites return an `assumptions` list naming anything the model invented (a file
+path, a rationale) so it is never presented as known fact.
+
+---
+
+## Data correctness
+
+Two problems were found by auditing the stored data, both now fixed:
+
+**1. Transcript noise (37% of rows).** Skill-file injections, slash-command
+echoes, IDE events and task notifications are recorded as user turns. They are
+long and well-structured, so they scored *highly* — 5 of the top 6 "best
+prompts" were text nobody typed. `backend/ingestion/classify.py` labels each
+turn and strips wrapper blocks; only `kind == "user"` is scored or reported.
+
+**2. Wrong project attribution.** Sessions were filed under the directory Claude
+Code launched in, so work on another repo counted towards the wrong project.
+`backend/ingestion/attribute.py` walks up from each edited file to its enclosing
+`.git` root and takes the majority, falling back to the session cwd for turns
+that touched no files. `.git` is checked in its own pass so sub-packages
+(`frontend/package.json`) don't become separate "projects".
+
+After upgrading an existing database, run **`promptly reclassify`** once — it
+re-labels, re-attributes, rescores, and drops stale report caches.
 
 ### Known gaps
 

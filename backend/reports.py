@@ -111,11 +111,30 @@ def collect(db: DbSession, project_path: str) -> ReportInputs:
             )
         )
     )
+    # A prompt counts towards the project whose files it touched, which is not
+    # always the project its session was started in — so gather candidates from
+    # both sides and filter on the prompt's own attribution.
+    candidate_sessions = set(sessions)
+    for p in db.scalars(
+        select(Prompt).where(
+            (Prompt.project_path == normalized)
+            | (Prompt.project_path.like(f"{prefix}/%", escape="\\"))
+        )
+    ):
+        candidate_sessions.add(p.session)
+
+    def belongs(p: Prompt) -> bool:
+        owner = p.project_path or p.session.project_path
+        return bool(owner) and (owner == normalized or owner.startswith(f"{normalized}/"))
+
     prompts: list[Prompt] = []
-    for s in sessions:
+    for s in candidate_sessions:
         # Only turns a person actually typed belong in a report.
-        prompts.extend(p for p in s.prompts if (p.kind or KIND_USER) == KIND_USER)
+        prompts.extend(
+            p for p in s.prompts if (p.kind or KIND_USER) == KIND_USER and belongs(p)
+        )
     prompts.sort(key=lambda p: _sort_key(p.timestamp))
+    sessions = [s for s in candidate_sessions if any(p.session_id == s.id for p in prompts)]
     return ReportInputs(project_path=normalized, sessions=sessions, prompts=prompts)
 
 

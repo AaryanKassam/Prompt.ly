@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from ..ml.scorer import score as score_text
 from ..models import Prompt, Score, Session
+from .attribute import attribute_prompt
 from .classify import KIND_USER, classify, clean
 from .jsonl_parser import ParsedSession
 
@@ -93,6 +94,9 @@ def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -
             tool_calls=p.tool_calls or None,
             file_diffs=p.file_diffs(),
             kind=classify(p.text),
+            project_path=attribute_prompt(
+                p.tool_calls or None, p.file_diffs(), session.project_path
+            ),
         )
         db.add(prompt)
         db.flush()  # assign prompt.id before scoring

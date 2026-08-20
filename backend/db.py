@@ -41,6 +41,7 @@ class Base(DeclarativeBase):
 # missing *tables*, so additive columns need an explicit ALTER.
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("prompts", "kind", "VARCHAR(24)"),
+    ("prompts", "project_path", "TEXT"),
 ]
 
 

@@ -266,16 +266,15 @@ def cmd_projects(args: argparse.Namespace) -> int:
     try:
         if not args.no_sync:
             import_sessions(db)
+        owner = func.coalesce(Prompt.project_path, Session.project_path)
         rows = db.execute(
-            select(
-                Session.project_path,
-                func.count(Prompt.id),
-                func.avg(Score.overall),
-            )
-            .outerjoin(Prompt, Prompt.session_id == Session.id)
+            select(owner, func.count(Prompt.id), func.avg(Score.overall))
+            .select_from(Prompt)
+            .join(Session, Prompt.session_id == Session.id)
             .outerjoin(Score, Score.prompt_id == Prompt.id)
-            .where(Session.project_path.is_not(None))
-            .group_by(Session.project_path)
+            .where(owner.is_not(None))
+            .where(Prompt.kind == "user")
+            .group_by(owner)
             .order_by(func.count(Prompt.id).desc())
         ).all()
     finally:
@@ -447,6 +446,7 @@ def cmd_reclassify(args: argparse.Namespace) -> int:
 
     from sqlalchemy import select
 
+    from .ingestion.attribute import attribute_prompt
     from .ingestion.classify import KIND_USER, classify
     from .ingestion.store import score_and_attach
     from .models import Prompt, ReportCache
@@ -462,6 +462,9 @@ def cmd_reclassify(args: argparse.Namespace) -> int:
                 changed += 1
             p.kind = new_kind
             counts[new_kind] += 1
+            p.project_path = attribute_prompt(
+                p.tool_calls, p.file_diffs, p.session.project_path
+            )
             score_and_attach(db, p)
         # Reports are memoized on prompt counts, which just moved.
         for row in db.scalars(select(ReportCache)):
@@ -484,6 +487,58 @@ def cmd_reclassify(args: argparse.Namespace) -> int:
     console.print(
         f"\n[green]{counts[KIND_USER]}[/green] real prompts scored; "
         f"[grey62]{sum(counts.values()) - counts[KIND_USER]}[/grey62] transcript rows excluded."
+    )
+    return 0
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    """Report how well the scorer separates good prompts from bad ones."""
+    from .validation import validate
+
+    db = SessionLocal()
+    try:
+        result = validate(db)
+    finally:
+        db.close()
+
+    if args.json:
+        print(json.dumps(result))
+        return 0
+
+    b, o = result["benchmark"], result["outcomes"]
+
+    bench = Table.grid(padding=(0, 2))
+    bench.add_column(justify="right", style="grey62", width=18)
+    bench.add_column()
+    bench.add_row("weak mean", Text(f"{b['mean_weak']}/10", style="red"))
+    bench.add_row("strong mean", Text(f"{b['mean_strong']}/10", style="green"))
+    bench.add_row("separation", Text(f"{b['ratio']}x"))
+    bench.add_row(
+        "pairwise accuracy",
+        Text(f"{b['pairs_correct']}/{b['pairs']}",
+             style="green" if b["pairwise_accuracy"] >= 0.9 else "yellow"),
+    )
+    bench.add_row("AUC", Text(str(b["auc"])))
+    console.print(
+        Panel(bench, title=f"benchmark · {b['pairs']} paired prompts",
+              border_style="grey30", padding=(0, 1))
+    )
+
+    inverted = [r["topic"] for r in b["results"] if not r["correct"]]
+    if inverted:
+        console.print(f"[yellow]inverted pairs:[/yellow] {', '.join(inverted)}")
+
+    out = Table.grid(padding=(0, 2))
+    out.add_column(justify="right", style="grey62", width=18)
+    out.add_column()
+    out.add_row("scored prompts", str(o["n"]))
+    if o.get("correlation") is not None:
+        out.add_row("correlation r", str(o["correlation"]))
+        out.add_row("outcome, low half", str(o["mean_outcome_low_half"]))
+        out.add_row("outcome, high half", str(o["mean_outcome_high_half"]))
+    console.print(
+        Panel(out, title="outcome correlation · your real prompts",
+              border_style="grey30", padding=(0, 1))
     )
     return 0
 
@@ -547,6 +602,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_rc.add_argument("--json", action="store_true")
     p_rc.set_defaults(func=cmd_reclassify)
+
+    p_val = sub.add_parser("validate", help="measure scorer separation on a benchmark")
+    p_val.add_argument("--json", action="store_true")
+    p_val.set_defaults(func=cmd_validate)
 
     p_ws = sub.add_parser("workspaces", help="folders open in VS Code / Cursor")
     p_ws.add_argument("--json", action="store_true")

@@ -20,6 +20,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
+from ..ingestion.classify import KIND_USER, clean
 from ..ingestion.signals import compute_outcome_score, detect_iteration_count
 from ..models import Prompt, Session
 from .features import signal_vector
@@ -39,21 +40,27 @@ def build_dataset(db: DbSession) -> list[TrainingExample]:
     """Assemble weak-labeled training examples from all sessions with text."""
     examples: list[TrainingExample] = []
     for session in db.scalars(select(Session)):
-        prompts: list[Prompt] = list(session.prompts)  # ordered by turn_index
+        # Train only on turns a person actually typed. Skill injections and
+        # command echoes are long and well-formed, so including them teaches
+        # the model that transcript boilerplate is a good prompt.
+        prompts: list[Prompt] = [
+            p for p in session.prompts if (p.kind or KIND_USER) == KIND_USER
+        ]
         for i, p in enumerate(prompts):
-            if not p.text:
+            if not clean(p.text):
                 continue
             nxt = prompts[i + 1] if i + 1 < len(prompts) else None
             iteration_count = detect_iteration_count(prompts, i)
+            text = clean(p.text)
             outcome = compute_outcome_score(
-                prompt_text=p.text,
-                next_prompt_text=(nxt.text if nxt else "") or "",
+                prompt_text=text,
+                next_prompt_text=clean(nxt.text) if nxt else "",
                 response_text=p.response_text or "",
                 file_diffs=p.file_diffs,
                 iteration_count=iteration_count,
             )
             examples.append(
-                TrainingExample(text=p.text, label=outcome / 10.0, structural=signal_vector(p.text))
+                TrainingExample(text=text, label=outcome / 10.0, structural=signal_vector(text))
             )
     return examples
 
