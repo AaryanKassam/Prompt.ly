@@ -85,3 +85,21 @@ def upsert_annotation(
     db.add(ann)
     db.commit()
     return {"note": ann.note, "tags": ann.tags or []}
+
+
+@router.get("/{prompt_id}/improve")
+def improve_prompt(prompt_id: str, db: DbSession = Depends(get_session)) -> dict:
+    """What's weak about this prompt, plus a stronger draft of it."""
+    from ..improve import improve
+
+    prompt = db.get(Prompt, prompt_id)
+    if prompt is None:
+        raise HTTPException(status_code=404, detail="prompt not found")
+    if not (prompt.text or "").strip():
+        raise HTTPException(status_code=400, detail="no prompt text captured")
+
+    return {
+        "prompt_id": prompt_id,
+        "score": prompt.score.overall if prompt.score else None,
+        **improve(prompt.text),
+    }

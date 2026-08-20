@@ -79,6 +79,10 @@ class Prompt(Base):
     file_diffs: Mapped[Optional[dict]] = mapped_column(JSON)   # {edited, created, deleted}
     summary: Mapped[Optional[str]] = mapped_column(Text)        # Phase 4: "what Claude did"
 
+    # Transcript turns that were never typed by a person (skill injections,
+    # slash-command echoes, IDE events). Only "user" rows are scored/reported.
+    kind: Mapped[Optional[str]] = mapped_column(String(24), index=True)
+
     session: Mapped["Session"] = relationship(back_populates="prompts")
     score: Mapped[Optional["Score"]] = relationship(
         back_populates="prompt", cascade="all, delete-orphan", uselist=False

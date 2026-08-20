@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from ..ml.scorer import score as score_text
 from ..models import Prompt, Score, Session
+from .classify import KIND_USER, classify, clean
 from .jsonl_parser import ParsedSession
 
 
@@ -19,9 +20,23 @@ class ImportResult:
     prompts_scored: int = 0
 
 
-def score_and_attach(db: DbSession, prompt: Prompt) -> Score:
-    """Run the rubric scorer on a prompt and attach a Score row (replacing any)."""
-    result = score_text(prompt.text or "")
+def score_and_attach(db: DbSession, prompt: Prompt) -> Score | None:
+    """Score a prompt and attach a Score row (replacing any).
+
+    Non-user turns are left unscored: skill files and command echoes are long
+    and well-formed, so scoring them pollutes averages and dominates the
+    "best prompt" rankings with text the user never wrote.
+    """
+    if prompt.kind is None:
+        prompt.kind = classify(prompt.text)
+    if prompt.kind != KIND_USER:
+        if prompt.score is not None:
+            db.delete(prompt.score)
+            db.flush()
+        return None
+
+    # Score the user's own words, not the wrapper blocks around them.
+    result = score_text(clean(prompt.text))
     if prompt.score is not None:
         db.delete(prompt.score)
         db.flush()
@@ -77,9 +92,10 @@ def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -
             timestamp=p.timestamp,
             tool_calls=p.tool_calls or None,
             file_diffs=p.file_diffs(),
+            kind=classify(p.text),
         )
         db.add(prompt)
         db.flush()  # assign prompt.id before scoring
-        score_and_attach(db, prompt)
+        if score_and_attach(db, prompt) is not None:
+            result.prompts_scored += 1
         result.prompts_created += 1
-        result.prompts_scored += 1

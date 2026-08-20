@@ -37,12 +37,35 @@ class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
 
 
+# Columns added after the first release. SQLAlchemy's create_all only creates
+# missing *tables*, so additive columns need an explicit ALTER.
+_ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    ("prompts", "kind", "VARCHAR(24)"),
+]
+
+
+def _apply_additive_migrations() -> None:
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, column, ddl_type in _ADDED_COLUMNS:
+            if table not in existing_tables:
+                continue
+            columns = {c["name"] for c in inspector.get_columns(table)}
+            if column in columns:
+                continue
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+
+
 def init_db() -> None:
     """Create all tables. Safe to call repeatedly (no-op if they exist)."""
     # Import models so they register on Base.metadata before create_all.
     from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _apply_additive_migrations()
 
 
 def get_session():

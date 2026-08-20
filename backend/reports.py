@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
+from .ingestion.classify import KIND_USER, clean
 from .ml.features import SIGNALS, extract_signals
 from .ml.rubric import WEIGHTS
 from .models import Prompt, ReportCache, Score, Session
@@ -112,7 +113,8 @@ def collect(db: DbSession, project_path: str) -> ReportInputs:
     )
     prompts: list[Prompt] = []
     for s in sessions:
-        prompts.extend(s.prompts)
+        # Only turns a person actually typed belong in a report.
+        prompts.extend(p for p in s.prompts if (p.kind or KIND_USER) == KIND_USER)
     prompts.sort(key=lambda p: _sort_key(p.timestamp))
     return ReportInputs(project_path=normalized, sessions=sessions, prompts=prompts)
 
@@ -136,7 +138,7 @@ def _signal_hit_rates(texts: list[str]) -> dict[str, float]:
 
 
 def _preview(text: str | None, limit: int = 160) -> str:
-    t = " ".join((text or "").split())
+    t = " ".join(clean(text).split())
     return t[:limit] + ("…" if len(t) > limit else "")
 
 
@@ -144,7 +146,7 @@ def build_report(db: DbSession, project_path: str) -> dict:
     """Assemble the full report payload for one project folder."""
     data = collect(db, project_path)
     scored = [p for p in data.prompts if p.score and p.score.overall is not None]
-    texts = [p.text for p in data.prompts if p.text]
+    texts = [clean(p.text) for p in data.prompts if clean(p.text)]
 
     overall = _avg([p.score.overall for p in scored])
     factors = {
@@ -254,6 +256,81 @@ def build_report(db: DbSession, project_path: str) -> dict:
             }
             for s in sorted(data.sessions, key=lambda s: _sort_key(s.created_at), reverse=True)
         ],
+    }
+
+
+SIGNAL_LABELS: dict[str, str] = {
+    "single_imperative_verb": "opens with one action verb",
+    "no_passive_voice": "active voice",
+    "no_hedge_words": "no hedging",
+    "sentence_count_le_5": "5 sentences or fewer",
+    "mentions_file_or_line": "names a file or line",
+    "names_exact_function_class": "names exact identifiers",
+    "has_concrete_output_format": "states output format",
+    "no_vague_quantifiers": "no vague quantifiers",
+    "references_prior_turn": "anchors to prior turn",
+    "provides_background_why": "explains why",
+    "mentions_tech_stack": "names the stack",
+    "has_negative_constraint": "says what not to do",
+    "specifies_scope_limit": "bounds the scope",
+    "single_task_focus": "one task",
+    "no_compound_and_also": "no compound asks",
+    "task_size_appropriate": "right size",
+    "has_code_block": "includes code",
+    "has_before_after": "shows before/after",
+    "has_inline_example": "gives an example",
+}
+
+
+def factor_evidence(db: DbSession, project_path: str, factor: str, limit: int = 10) -> dict:
+    """Which recent prompts pushed one factor up or down.
+
+    A factor score is otherwise an unexplained number. This returns the last
+    `limit` prompts with their per-signal pass/fail for that factor, so the bar
+    can be expanded into the evidence behind it.
+    """
+    if factor not in SIGNALS:
+        return {"factor": factor, "error": "unknown factor"}
+
+    data = collect(db, project_path)
+    recent = [p for p in data.prompts if clean(p.text)][-limit:][::-1]
+
+    signal_names = list(SIGNALS[factor])
+    entries = []
+    for p in recent:
+        results = extract_signals(clean(p.text))[factor]
+        met = sum(1 for hit in results.values() if hit)
+        entries.append({
+            "id": p.id,
+            "session_id": p.session_id,
+            "turn_index": p.turn_index,
+            "preview": _preview(p.text, 120),
+            "factor_score": round(10.0 * met / len(signal_names), 1) if signal_names else None,
+            "met": met,
+            "total": len(signal_names),
+            "signals": [
+                {"name": n, "label": SIGNAL_LABELS.get(n, n.replace("_", " ")), "met": bool(results[n])}
+                for n in signal_names
+            ],
+        })
+
+    # Per-signal hit counts across this window, so the weakest habit is visible.
+    breakdown = [
+        {
+            "name": n,
+            "label": SIGNAL_LABELS.get(n, n.replace("_", " ")),
+            "met": sum(1 for e in entries if e["signals"][i]["met"]),
+            "total": len(entries),
+        }
+        for i, n in enumerate(signal_names)
+    ]
+
+    return {
+        "factor": factor,
+        "weight": WEIGHTS.get(factor),
+        "window": len(entries),
+        "breakdown": breakdown,
+        "prompts": entries,
     }
 
 

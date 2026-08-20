@@ -157,6 +157,49 @@ export interface ProjectReport {
   }[];
 }
 
+export interface PromptIssue {
+  signal: string;
+  factor: string;
+  label: string;
+  why: string;
+}
+
+export interface PromptImprovement {
+  prompt_id: string;
+  score: number | null;
+  original: string;
+  issues: PromptIssue[];
+  issue_count: number;
+  rewrite: string;
+  slots: number;
+  kept_detail: boolean;
+}
+
+export interface FactorSignal {
+  name: string;
+  label: string;
+  met: boolean;
+}
+
+export interface FactorEvidencePrompt {
+  id: string;
+  session_id: string;
+  turn_index: number;
+  preview: string;
+  factor_score: number | null;
+  met: number;
+  total: number;
+  signals: FactorSignal[];
+}
+
+export interface FactorEvidence {
+  factor: string;
+  weight: number | null;
+  window: number;
+  breakdown: { name: string; label: string; met: number; total: number }[];
+  prompts: FactorEvidencePrompt[];
+}
+
 export const api = {
   sessions: () => get<SessionSummary[]>("/api/sessions"),
   session: (id: string) => get<SessionDetail>(`/api/sessions/${id}`),
@@ -170,6 +213,12 @@ export const api = {
   refreshReport: (path?: string) =>
     post<ProjectReport>(
       `/api/projects/report/refresh${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+    ),
+  improve: (id: string) => get<PromptImprovement>(`/api/prompts/${id}/improve`),
+  factor: (factor: string, path?: string, limit = 10) =>
+    get<FactorEvidence>(
+      `/api/projects/factor?factor=${encodeURIComponent(factor)}&limit=${limit}` +
+        (path ? `&path=${encodeURIComponent(path)}` : ""),
     ),
   saveAnnotation: (id: string, body: { note?: string; tags?: string[] }) =>
     patch<{ note: string | null; tags: string[] }>(

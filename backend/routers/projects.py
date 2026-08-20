@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session as DbSession
 
 from ..db import get_session
 from ..models import Prompt, Score, Session
-from ..reports import cached_report, collect, import_sessions, render_markdown
+from ..reports import (
+    cached_report,
+    collect,
+    factor_evidence,
+    import_sessions,
+    render_markdown,
+)
 from ..workspace import detect_active_workspace, list_open_workspaces
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -100,6 +106,20 @@ def project_report(
             "markdown": render_markdown(payload),
         }
     return {**payload, "cached": was_cached}
+
+
+@router.get("/factor")
+def factor_detail(
+    factor: str = Query(..., description="clarity | specificity | context | constraints | scope | examples"),
+    path: str | None = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    db: DbSession = Depends(get_session),
+) -> dict:
+    """Evidence behind one factor score: recent prompts and their signals."""
+    result = factor_evidence(db, _resolve_path(path), factor, limit=limit)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 
 @router.post("/report/refresh")

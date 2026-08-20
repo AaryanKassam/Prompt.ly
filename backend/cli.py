@@ -436,6 +436,58 @@ def cmd_install_hook(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reclassify(args: argparse.Namespace) -> int:
+    """Re-label every stored turn and rescore the ones that are real prompts.
+
+    Needed once after upgrading: rows imported before classification existed
+    were all treated as user prompts, including skill injections and command
+    echoes, which distorted every average.
+    """
+    from collections import Counter
+
+    from sqlalchemy import select
+
+    from .ingestion.classify import KIND_USER, classify
+    from .ingestion.store import score_and_attach
+    from .models import Prompt, ReportCache
+
+    db = SessionLocal()
+    try:
+        prompts = list(db.scalars(select(Prompt)))
+        counts: Counter = Counter()
+        changed = 0
+        for p in prompts:
+            new_kind = classify(p.text)
+            if p.kind != new_kind:
+                changed += 1
+            p.kind = new_kind
+            counts[new_kind] += 1
+            score_and_attach(db, p)
+        # Reports are memoized on prompt counts, which just moved.
+        for row in db.scalars(select(ReportCache)):
+            db.delete(row)
+        db.commit()
+    finally:
+        db.close()
+
+    if args.json:
+        print(json.dumps({"reclassified": changed, "kinds": dict(counts)}))
+        return 0
+
+    table = Table(box=None, pad_edge=False, header_style="grey50")
+    table.add_column("turns", justify="right", width=6)
+    table.add_column("kind")
+    for kind, n in counts.most_common():
+        style = "green" if kind == KIND_USER else "grey62"
+        table.add_row(Text(str(n), style=style), Text(kind, style=style))
+    console.print(table)
+    console.print(
+        f"\n[green]{counts[KIND_USER]}[/green] real prompts scored; "
+        f"[grey62]{sum(counts.values()) - counts[KIND_USER]}[/grey62] transcript rows excluded."
+    )
+    return 0
+
+
 def cmd_workspaces(args: argparse.Namespace) -> int:
     workspaces = list_open_workspaces()
     if args.json:
@@ -489,6 +541,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_hook = sub.add_parser("install-hook", help="auto-sync after each Claude Code session")
     p_hook.add_argument("--uninstall", action="store_true")
     p_hook.set_defaults(func=cmd_install_hook)
+
+    p_rc = sub.add_parser(
+        "reclassify", help="re-label stored turns and rescore real prompts"
+    )
+    p_rc.add_argument("--json", action="store_true")
+    p_rc.set_defaults(func=cmd_reclassify)
 
     p_ws = sub.add_parser("workspaces", help="folders open in VS Code / Cursor")
     p_ws.add_argument("--json", action="store_true")

@@ -35,3 +35,7 @@ frontend/tsconfig.tsbuildinfo
 # VS Code extension has no build artifacts, but keep node_modules out if added
 vscode-extension/node_modules/
 vscode-extension/*.vsix
+
+# Local agent/skill tooling artifacts
+.agents/
+skills-lock.json

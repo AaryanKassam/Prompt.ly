@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { invalidate, primeCache, useQuery } from "@/lib/useQuery";
 import ScoreBadge from "@/components/ScoreBadge";
-import ScoreBreakdown from "@/components/ScoreBreakdown";
+import ExpandableFactors from "@/components/ExpandableFactors";
+import ImprovePanel from "@/components/ImprovePanel";
 import Tooltip from "@/components/Tooltip";
 import { StatTile, TrendPill } from "@/components/StatTile";
 import { CardListSkeleton, EmptyState, ErrorState, StatRowSkeleton } from "@/components/states";
@@ -149,7 +150,7 @@ function ReportView() {
 
           <section className="card p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="eyebrow">Factor breakdown</h2>
+              <h2 className="eyebrow">Factor breakdown · click to expand</h2>
               <div className="flex gap-3 text-2xs text-content-subtle">
                 {r.strongest_factor && (
                   <span>
@@ -169,7 +170,11 @@ function ReportView() {
                 )}
               </div>
             </div>
-            <ScoreBreakdown factors={r.factors} highlight={r.weakest_factor} />
+            <ExpandableFactors
+              factors={r.factors}
+              highlight={r.weakest_factor}
+              path={r.project_path}
+            />
           </section>
 
           {r.recommendations.length > 0 && (
@@ -208,16 +213,7 @@ function ReportView() {
                 <h2 className="eyebrow mb-3">Lowest-scoring prompts</h2>
                 <div className="space-y-2">
                   {r.worst_prompts.map((p) => (
-                    <Link
-                      key={p.id}
-                      href={`/prompts/${p.id}`}
-                      className="card-interactive flex items-start gap-3 p-3.5"
-                    >
-                      <ScoreBadge score={p.score} size="sm" />
-                      <p className="min-w-0 flex-1 text-sm leading-relaxed text-content-muted">
-                        {p.preview}
-                      </p>
-                    </Link>
+                    <ImprovePanel key={p.id} prompt={p} />
                   ))}
                 </div>
               </section>
