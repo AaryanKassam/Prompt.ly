@@ -491,6 +491,146 @@ def cmd_reclassify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Check every moving part and say what to do about anything broken.
+
+    Prompt.ly spans four surfaces, a venv, an optional API key and a background
+    import hook. When something doesn't work it is rarely obvious which piece
+    is at fault, so this reports them all in one place.
+    """
+    from sqlalchemy import func, select
+
+    from .ingestion.classify import KIND_USER
+    from .ingestion.jsonl_parser import default_projects_dir
+    from .llm import available as llm_available
+    from .ml.scorer import BLEND_MIN_EXAMPLES, active_model_info
+    from .models import Prompt
+
+    repo = Path(__file__).resolve().parent.parent
+    checks: list[tuple[str, bool | None, str]] = []
+
+    # Session logs — the whole pipeline starts here.
+    logs = default_projects_dir()
+    n_logs = len(list(logs.glob("*/*.jsonl"))) if logs.is_dir() else 0
+    checks.append((
+        "Claude Code logs", n_logs > 0,
+        f"{n_logs} session file(s) in {logs}" if n_logs
+        else f"none found in {logs} — use Claude Code, then run `promptly sync`",
+    ))
+
+    db = SessionLocal()
+    try:
+        scored = db.scalar(
+            select(func.count(Prompt.id)).where(Prompt.kind == KIND_USER)
+        ) or 0
+        total = db.scalar(select(func.count(Prompt.id))) or 0
+    finally:
+        db.close()
+    checks.append((
+        "Database", total > 0,
+        f"{scored} real prompts ({total - scored} transcript rows excluded)" if total
+        else "empty — run `promptly sync`",
+    ))
+
+    # .env is what makes one key reach every surface.
+    env_file = repo / ".env"
+    checks.append((
+        ".env file", env_file.exists(),
+        str(env_file) if env_file.exists() else f"missing — `cp .env.example .env`",
+    ))
+
+    key_set = llm_available()
+    checks.append((
+        "Claude API", key_set,
+        "configured — Execute and Claude rewrites are enabled" if key_set
+        else "no key — offline features work; set ANTHROPIC_API_KEY in .env to enable rewrites",
+    ))
+
+    model = active_model_info()
+    weights = sorted((repo / "backend" / "ml" / "weights").glob("model_v*.json"))
+    if model:
+        detail = f"MLP v{model['version']} active (trained on {model['examples']})"
+    elif weights:
+        import json as _json
+
+        meta = _json.loads(weights[-1].read_text())
+        detail = (
+            f"MLP v{meta['version']} trained on {meta['examples']}, inactive until "
+            f"{BLEND_MIN_EXAMPLES} — scoring with the rubric"
+        )
+    else:
+        detail = "rubric only — no model trained yet"
+    checks.append(("Scoring model", None, detail))
+
+    # Auto-import hook.
+    settings = Path.home() / ".claude" / "settings.json"
+    hooked = False
+    if settings.exists():
+        try:
+            data = json.loads(settings.read_text())
+            hooked = any(
+                _is_promptly_hook(h.get("command", ""))
+                for entry in data.get("hooks", {}).get("SessionEnd", [])
+                for h in entry.get("hooks", [])
+            )
+        except json.JSONDecodeError:
+            hooked = False
+    checks.append((
+        "Auto-sync hook", hooked,
+        "installed — sessions import themselves" if hooked
+        else "not installed — run `promptly install-hook`",
+    ))
+
+    # Claude desktop / Claude Code MCP registration.
+    mcp_paths = [
+        Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
+        repo / ".mcp.json",
+    ]
+    registered = []
+    for cfg in mcp_paths:
+        if not cfg.exists():
+            continue
+        try:
+            if "promptly" in json.loads(cfg.read_text()).get("mcpServers", {}):
+                registered.append("desktop" if "Application Support" in str(cfg) else "Claude Code")
+        except json.JSONDecodeError:
+            continue
+    checks.append((
+        "Claude extension", bool(registered),
+        f"registered with {', '.join(registered)}" if registered
+        else "not registered — run `python mcp_server/install.py`",
+    ))
+
+    # VS Code extension.
+    ext = Path.home() / ".vscode" / "extensions" / "promptly-1.0.0"
+    checks.append((
+        "VS Code extension", ext.exists(),
+        "installed" if ext.exists()
+        else f'not installed — ln -s "{repo}/vscode-extension" {ext}',
+    ))
+
+    if args.json:
+        print(json.dumps([{"check": c, "ok": o, "detail": d} for c, o, d in checks]))
+        return 0
+
+    table = Table(box=None, pad_edge=False, header_style="grey50")
+    table.add_column("", width=2)
+    table.add_column("check", width=18)
+    table.add_column("detail")
+    for name, ok, detail in checks:
+        mark, style = ("·", "grey50") if ok is None else (("✓", "green") if ok else ("✗", "red"))
+        table.add_row(Text(mark, style=style), Text(name, style="white"),
+                      Text(detail, style="grey62"))
+    console.print(table)
+
+    broken = [n for n, ok, _ in checks if ok is False]
+    if broken:
+        console.print(f"\n[yellow]Needs attention:[/yellow] {', '.join(broken)}")
+    else:
+        console.print("\n[green]Everything is wired up.[/green]")
+    return 0
+
+
 def cmd_share(args: argparse.Namespace) -> int:
     """Write a redacted report that is safe to send to someone else."""
     from .share import build
@@ -646,6 +786,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_rc.add_argument("--json", action="store_true")
     p_rc.set_defaults(func=cmd_reclassify)
+
+    p_doc = sub.add_parser("doctor", help="check every part of the setup")
+    p_doc.add_argument("--json", action="store_true")
+    p_doc.set_defaults(func=cmd_doctor)
 
     p_share = sub.add_parser("share", help="write a redacted report safe to send to others")
     p_share.add_argument("path", nargs="?")

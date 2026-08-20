@@ -32,14 +32,34 @@ class LLMUnavailable(RuntimeError):
     """No credentials, SDK missing, or the call failed."""
 
 
+def _looks_like_real_key(value: str | None) -> bool:
+    """Reject the placeholder shipped in .env.example.
+
+    `ANTHROPIC_API_KEY=sk-ant-...` is a non-empty string, so a bare truthiness
+    check reports the API as configured and the user only finds out when a call
+    401s. Anything containing an ellipsis, or too short to be a real key, is a
+    placeholder someone forgot to replace.
+    """
+    if not value:
+        return False
+    value = value.strip()
+    if "..." in value or "…" in value:
+        return False
+    if value.lower() in {"changeme", "your-key-here", "todo"}:
+        return False
+    return len(value) >= 20
+
+
 def available() -> bool:
     """True when a rewrite could actually be attempted."""
     if os.getenv("PROMPTLY_DISABLE_LLM"):
         return False
-    if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")):
-        # An `ant auth login` profile also works; the SDK resolves it itself.
-        if not _has_cli_profile():
-            return False
+    has_key = _looks_like_real_key(os.getenv("ANTHROPIC_API_KEY")) or _looks_like_real_key(
+        os.getenv("ANTHROPIC_AUTH_TOKEN")
+    )
+    # An `ant auth login` profile also works; the SDK resolves it itself.
+    if not has_key and not _has_cli_profile():
+        return False
     try:
         import anthropic  # noqa: F401
     except ImportError:
