@@ -491,6 +491,50 @@ def cmd_reclassify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_share(args: argparse.Namespace) -> int:
+    """Write a redacted report that is safe to send to someone else."""
+    from .share import build
+
+    path = resolve_path(args.path)
+    if path is None:
+        console.print("[red]Could not determine which folder to report on.[/red]")
+        return 1
+
+    db = SessionLocal()
+    try:
+        if not args.no_sync:
+            import_sessions(db)
+        report, _ = cached_report(db, path)
+    finally:
+        db.close()
+
+    if not report["totals"]["prompts"]:
+        console.print("[red]No prompts recorded for this project.[/red]")
+        return 1
+
+    result = build(report, anonymize=args.anonymize)
+    body = json.dumps(result["payload"], indent=2) if args.json else result["html"]
+
+    out = Path(
+        args.output
+        or f"promptly-report-{result['payload']['project'].replace(' ', '-').lower()}"
+        f".{'json' if args.json else 'html'}"
+    ).expanduser()
+    out.write_text(body)
+
+    console.print(f"[green]Wrote[/green] {out}")
+    console.print(
+        "[grey50]Aggregate scores and rates only — no prompt text, file paths "
+        "or session titles.[/grey50]"
+    )
+    if not args.anonymize:
+        console.print(
+            f"[grey50]Project is named '{result['payload']['project']}'; "
+            "pass --anonymize to replace it.[/grey50]"
+        )
+    return 0
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     """Report how well the scorer separates good prompts from bad ones."""
     from .validation import validate
@@ -602,6 +646,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_rc.add_argument("--json", action="store_true")
     p_rc.set_defaults(func=cmd_reclassify)
+
+    p_share = sub.add_parser("share", help="write a redacted report safe to send to others")
+    p_share.add_argument("path", nargs="?")
+    p_share.add_argument("-o", "--output", help="output file (default: ./promptly-report-<project>.html)")
+    p_share.add_argument("--anonymize", action="store_true", help="hide the project folder name")
+    p_share.add_argument("--json", action="store_true", help="emit JSON instead of HTML")
+    p_share.add_argument("--no-sync", action="store_true")
+    p_share.set_defaults(func=cmd_share)
 
     p_val = sub.add_parser("validate", help="measure scorer separation on a benchmark")
     p_val.add_argument("--json", action="store_true")

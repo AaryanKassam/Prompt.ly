@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Start (or restart) both Prompt.ly servers.
+#
+#   ./scripts/dev          start both, backend on :8000, dashboard on :3000
+#   ./scripts/dev stop     stop both
+#   ./scripts/dev backend  backend only
+#
+# Existing listeners on those ports are killed first, so this doubles as a
+# restart — which is what you want after editing .env, since environment
+# variables are read once at import.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY="$REPO/backend/venv/bin/python"
+LOGS="$REPO/.logs"
+mkdir -p "$LOGS"
+
+free_port() {
+  local pids
+  pids="$(lsof -ti:"$1" 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    echo "  stopping what was on :$1"
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    sleep 1
+  fi
+}
+
+start_backend() {
+  free_port 8000
+  ( cd "$REPO" && nohup "$PY" -m uvicorn backend.main:app --port 8000 \
+      >"$LOGS/backend.log" 2>&1 & )
+  for _ in $(seq 1 25); do
+    if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+      echo "  backend  http://localhost:8000  ready"
+      "$PY" - <<'PYEOF'
+import sys
+sys.path.insert(0, ".")
+from backend.llm import available
+print(f"  Claude API: {'enabled' if available() else 'not configured (offline features only)'}")
+PYEOF
+      return 0
+    fi
+    sleep 0.4
+  done
+  echo "  backend failed to start — see $LOGS/backend.log" >&2
+  tail -5 "$LOGS/backend.log" >&2
+  return 1
+}
+
+start_frontend() {
+  free_port 3000
+  ( cd "$REPO/frontend" && nohup npm run dev >"$LOGS/frontend.log" 2>&1 & )
+  for _ in $(seq 1 40); do
+    if curl -sf -o /dev/null http://localhost:3000 2>/dev/null; then
+      echo "  dashboard  http://localhost:3000  ready"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "  dashboard failed to start — see $LOGS/frontend.log" >&2
+  return 1
+}
+
+case "${1:-start}" in
+  stop)     echo "Stopping Prompt.ly"; free_port 8000; free_port 3000 ;;
+  backend)  echo "Starting backend";   start_backend ;;
+  frontend) echo "Starting dashboard"; start_frontend ;;
+  *)        echo "Starting Prompt.ly"; start_backend; start_frontend
+            echo; echo "  Open http://localhost:3000" ;;
+esac

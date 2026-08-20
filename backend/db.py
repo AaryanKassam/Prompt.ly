@@ -19,7 +19,11 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-load_dotenv()
+# Load the repo's .env explicitly rather than searching from the current
+# directory: the CLI, the MCP server and the VS Code extension all run from
+# arbitrary working directories, and a bare load_dotenv() would find nothing.
+# This is what makes one .env configure every surface at once.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Default to a SQLite file living at the repo root (backend/../promptly.db).
 _DEFAULT_SQLITE = f"sqlite:///{Path(__file__).resolve().parent.parent / 'promptly.db'}"

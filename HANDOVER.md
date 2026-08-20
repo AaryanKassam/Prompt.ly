@@ -356,6 +356,34 @@ Today everything is local-only. Making scores viewable on a website after login 
 
 ---
 
+## Sharing a report with someone outside the project
+
+The dashboard shows prompt text, file paths and session titles. None of that can
+go to an employer — a session title like "Set up HealthLink application" already
+describes unreleased work.
+
+```bash
+promptly share                    # ./promptly-report-<project>.html
+promptly share --anonymize        # folder name replaced with "Project A"
+promptly share --json             # machine-readable
+```
+
+Or the **Share** button on a project report page. Also
+`GET /api/projects/share?fmt=html|json&anonymize=`.
+
+The file contains aggregate scores, factor breakdowns, all 19 habit rates,
+activity counts, focus areas, and the benchmark result that shows the score means
+something. It contains no prompt text, no file names or paths, and no session
+titles.
+
+Redaction in `backend/share.py` is a **whitelist** — `redacted_payload` names
+every field it copies, so a field added to the internal report later cannot leak
+into a shared file by default. A leak test in the commit history checks real
+prompt n-grams, full file paths, session titles and home-directory fragments
+against the rendered output.
+
+---
+
 ## Where the language model is used
 
 Exactly two places, both additive garnish over locally-measured numbers:

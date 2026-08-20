@@ -9,6 +9,7 @@ import ScoreBadge from "@/components/ScoreBadge";
 import ExpandableFactors from "@/components/ExpandableFactors";
 import ImprovePanel from "@/components/ImprovePanel";
 import ExecutePanel from "@/components/ExecutePanel";
+import ShareButton from "@/components/ShareButton";
 import Tooltip from "@/components/Tooltip";
 import { StatTile, TrendPill } from "@/components/StatTile";
 import { CardListSkeleton, EmptyState, ErrorState, StatRowSkeleton } from "@/components/states";
@@ -74,6 +75,7 @@ function ReportView() {
               {r.cached ? "cached" : "freshly computed"}
             </span>
           )}
+          {r && r.totals.prompts > 0 && <ShareButton path={r.project_path} />}
           <Tooltip label="Re-import session logs and rebuild">
             <button
               onClick={refresh}

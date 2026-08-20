@@ -125,3 +125,11 @@ export const CheckIcon = (p: IconProps) => (
     <path d="M20 6 9 17l-5-5" />
   </Icon>
 );
+
+export const DownloadIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 3v12" />
+    <path d="m7 12 5 5 5-5" />
+    <path d="M5 21h14" />
+  </Icon>
+);

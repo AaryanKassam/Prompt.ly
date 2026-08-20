@@ -128,6 +128,38 @@ def factor_detail(
     return result
 
 
+@router.get("/share")
+def share_report(
+    path: str | None = Query(None),
+    fmt: str = Query("html", pattern="^(html|json)$"),
+    anonymize: bool = Query(False, description="Replace the folder name with 'Project A'"),
+    db: DbSession = Depends(get_session),
+):
+    """A redacted report safe to hand to someone outside the project.
+
+    Carries aggregate scores and rates only — no prompt text, file paths or
+    session titles. Redaction is a whitelist in backend/share.py, so fields
+    added to the internal report cannot leak here by default.
+    """
+    from fastapi.responses import HTMLResponse, JSONResponse
+
+    from ..share import build
+
+    resolved = _resolve_path(path)
+    report, _ = cached_report(db, resolved)
+    if not report["totals"]["prompts"]:
+        raise HTTPException(status_code=400, detail="no prompts recorded for this project")
+
+    result = build(report, anonymize=anonymize)
+    stem = result["payload"]["project"].replace(" ", "-").lower()
+    filename = f"promptly-report-{stem}.{fmt}"
+    disposition = {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    if fmt == "json":
+        return JSONResponse(result["payload"], headers=disposition)
+    return HTMLResponse(result["html"], headers=disposition)
+
+
 @router.get("/playbook")
 def get_playbook(
     path: str | None = Query(None),

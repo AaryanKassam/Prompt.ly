@@ -39,3 +39,6 @@ vscode-extension/*.vsix
 # Local agent/skill tooling artifacts
 .agents/
 skills-lock.json
+
+# Local server logs
+.logs/
