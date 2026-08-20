@@ -1,7 +1,6 @@
 # prompt.ly
 
-A lightweight browser extension that silently tracks your Claude.ai prompt usage and token estimates, surfacing a clean usage report without storing any prompt text.
-
+A VSCode Extension that gives a prompt rating / 10 for all prompts you use within a project, then provides feedback on how to improve them
 ---
 
 ## What it tracks
