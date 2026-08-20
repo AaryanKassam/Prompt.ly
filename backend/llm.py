@@ -213,7 +213,12 @@ Three concrete, checkable habits. Not "be more specific" — something they can 
 verify they did.
 
 Address the reader as "you". No preamble, no closing pep talk. Where you invent a \
-file path or rationale in a rewrite, mark it [like this] so it is obviously a slot."""
+file path or rationale in a rewrite, mark it [like this] so it is obviously a slot.
+
+Never nest a fenced code block inside another fenced code block — the two closing \
+fences are ambiguous and break rendering. If a rewritten prompt needs to reference \
+code the reader should paste, write a bracketed slot such as [paste the failing \
+test here] on its own line instead of opening a second fence."""
 
 
 @dataclass

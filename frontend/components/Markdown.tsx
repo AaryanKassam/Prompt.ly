@@ -43,7 +43,12 @@ function toHtml(markdown: string): string {
       closeList();
       const body: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].trimStart().startsWith("```")) {
+      // A closing fence is bare by definition, so a fence carrying an info
+      // string (```ts) is content from a nested block rather than a terminator.
+      while (i < lines.length) {
+        const t = lines[i].trimStart();
+        const isFence = t.startsWith("```");
+        if (isFence && t.slice(3).trim() === "") break;
         body.push(lines[i]);
         i++;
       }

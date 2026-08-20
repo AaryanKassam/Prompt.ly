@@ -15,15 +15,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-# Load the repo's .env explicitly rather than searching from the current
-# directory: the CLI, the MCP server and the VS Code extension all run from
-# arbitrary working directories, and a bare load_dotenv() would find nothing.
-# This is what makes one .env configure every surface at once.
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# .env is loaded in backend/__init__.py so every entry point gets it regardless
+# of which submodule it imports first.
 
 # Default to a SQLite file living at the repo root (backend/../promptly.db).
 _DEFAULT_SQLITE = f"sqlite:///{Path(__file__).resolve().parent.parent / 'promptly.db'}"
