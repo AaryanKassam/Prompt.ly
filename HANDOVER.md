@@ -391,7 +391,15 @@ Exactly two places, both additive garnish over locally-measured numbers:
 | Feature | Endpoint | Fallback without a key |
 |---|---|---|
 | Rewrite one weak prompt | `GET /api/prompts/{id}/improve?llm=true` | Rule-based template with bracketed slots |
-| "Execute" playbook | `POST /api/projects/playbook` | Button disabled, recommendations still shown |
+| Playbook of rewrites | `POST /api/projects/playbook` | Button disabled, recommendations still shown |
+
+The playbook returns **structured** data (pattern, per-prompt rewrites, template,
+habits), not prose, so the UI can collapse each rewrite behind its own heading
+and expand one at a time.
+
+Refreshing is manual and only offered when the playbook is actually out of date
+— new prompts have landed, or reclassification changed what counts. An
+always-available "Regenerate" mostly re-bought identical advice.
 
 Everything else — scoring, signals, recommendations, classification, the
 rule-based rewrite — is deterministic and runs offline.

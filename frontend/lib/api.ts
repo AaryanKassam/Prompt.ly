@@ -185,14 +185,38 @@ export interface LLMRewrite {
   usage: { input_tokens: number; output_tokens: number };
 }
 
+export interface PlaybookRewrite {
+  label: string;
+  rewritten: string;
+  why: string;
+  fixes: string[];
+  original?: string;
+  score?: number | null;
+  prompt_id?: string | null;
+}
+
+export interface PlaybookData {
+  pattern: string;
+  rewrites: PlaybookRewrite[];
+  template: string;
+  habits: string[];
+}
+
 export interface Playbook {
   exists?: boolean;
   llm_available?: boolean;
+  data?: PlaybookData;
   markdown?: string;
   generated_at?: string;
   model?: string | null;
-  stale?: boolean;
   cached?: boolean;
+  /** Prompts scored right now. */
+  prompt_count?: number;
+  /** Prompts that existed when the playbook was written. */
+  generated_at_prompt_count?: number;
+  /** How many prompts are new since — drives whether Refresh is offered. */
+  new_prompts?: number;
+  stale?: boolean;
   usage?: { input_tokens: number | null; output_tokens: number | null };
 }
 

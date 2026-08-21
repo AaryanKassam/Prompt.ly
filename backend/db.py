@@ -42,6 +42,8 @@ class Base(DeclarativeBase):
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("prompts", "kind", "VARCHAR(24)"),
     ("prompts", "project_path", "TEXT"),
+    ("playbooks", "data", "JSON"),
+    ("playbooks", "prompt_count", "INTEGER"),
 ]
 
 

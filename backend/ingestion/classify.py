@@ -48,6 +48,10 @@ _NOISE_PREFIXES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"^continue from where you left off", re.IGNORECASE), KIND_SYSTEM),
     (re.compile(r"^please continue\.?$", re.IGNORECASE), KIND_SYSTEM),
     (re.compile(r"^resume the (session|conversation)", re.IGNORECASE), KIND_SYSTEM),
+    # Attachment placeholders the harness substitutes for pasted media.
+    (re.compile(r"^\[Image:", re.IGNORECASE), KIND_SYSTEM),
+    (re.compile(r"^\[Pasted text", re.IGNORECASE), KIND_SYSTEM),
+    (re.compile(r"^\[Attached", re.IGNORECASE), KIND_SYSTEM),
 ]
 
 # Whole-turn markers: if present anywhere, the turn is that kind.

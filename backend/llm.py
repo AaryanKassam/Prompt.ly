@@ -188,47 +188,72 @@ def rewrite_prompt(original: str, issues: list[dict]) -> RewriteResult:
 
 
 PLAYBOOK_SYSTEM = """\
-You write short, personalised guides that help a developer prompt a coding assistant better.
+You coach developers on prompting a coding assistant more effectively.
 
-You receive measured statistics about how someone actually prompts: their weakest \
-habits with the percentage of prompts missing each, and real examples of their own \
-low-scoring prompts.
+You receive measured statistics about how someone actually prompts — their
+weakest habits with the percentage of prompts missing each — plus real examples
+of their own low-scoring prompts.
 
-Write a practical playbook in markdown with exactly these sections:
+Produce:
 
-## The pattern
-Two or three sentences naming the single underlying habit that connects their \
-weaknesses. Be specific to the data — do not give generic prompting advice.
+- `pattern`: two or three sentences naming the single underlying habit that
+  connects their weaknesses. Ground it in the numbers you were given. Not
+  generic prompting advice — something only true of this person.
 
-## Your prompts, rewritten
-For each example given, show the original in a blockquote, then a rewritten \
-version in a fenced code block, then one sentence on what changed and why it helps.
+- `rewrites`: one entry per example prompt supplied, in the order given.
+  - `label`: 3-6 words naming what the prompt was trying to do, e.g.
+    "Push and set up CI". This is the collapsed heading, so make it concrete.
+  - `rewritten`: the prompt rewritten well, ready to paste. Preserve their
+    original intent exactly; never expand the scope of what was asked. Where a
+    detail cannot be known (a file path, a rationale), write a [bracketed slot]
+    rather than inventing a fact. Plain text only — no markdown, no code fences.
+  - `why`: one sentence on what changed and why it gets a better result.
+  - `fixes`: 2-4 short phrases naming the specific weaknesses addressed.
 
-## A template you can reuse
-One fenced code block: a fill-in-the-blank prompt skeleton addressing their \
-specific weaknesses, with [bracketed] slots.
+- `template`: a reusable fill-in-the-blank prompt skeleton targeting their
+  specific weaknesses, with [bracketed] slots. Plain text, no code fences.
 
-## What to do tomorrow
-Three concrete, checkable habits. Not "be more specific" — something they can \
-verify they did.
+- `habits`: exactly three concrete, checkable things to do tomorrow. Not "be
+  more specific" — something they can verify they did.
 
-Address the reader as "you". No preamble, no closing pep talk. Where you invent a \
-file path or rationale in a rewrite, mark it [like this] so it is obviously a slot.
+Address the reader as "you". No preamble and no closing encouragement."""
 
-Never nest a fenced code block inside another fenced code block — the two closing \
-fences are ambiguous and break rendering. If a rewritten prompt needs to reference \
-code the reader should paste, write a bracketed slot such as [paste the failing \
-test here] on its own line instead of opening a second fence."""
+
+class PlaybookRewrite(BaseModel):
+    label: str = Field(description="3-6 words naming what this prompt was trying to do.")
+    rewritten: str = Field(description="The improved prompt, plain text, ready to paste.")
+    why: str = Field(description="One sentence on what changed and why it helps.")
+    fixes: list[str] = Field(description="2-4 short phrases naming the weaknesses addressed.")
+
+
+class PlaybookContent(BaseModel):
+    pattern: str = Field(description="The single underlying habit connecting their weaknesses.")
+    rewrites: list[PlaybookRewrite]
+    template: str = Field(description="Reusable prompt skeleton with [bracketed] slots.")
+    habits: list[str] = Field(description="Exactly three concrete, checkable habits.")
+
+
+def render_playbook_markdown(data: dict) -> str:
+    """Markdown rendering of the structured playbook, for terminal and MCP output."""
+    lines = ["## The pattern", "", data["pattern"], "", "## Your prompts, rewritten", ""]
+    for r in data["rewrites"]:
+        lines += [f"### {r['label']}", "", "```", r["rewritten"], "```", "", r["why"], ""]
+    lines += ["## A template you can reuse", "", "```", data["template"], "```", ""]
+    lines += ["## What to do tomorrow", ""]
+    lines += [f"{i}. {h}" for i, h in enumerate(data["habits"], 1)]
+    return "\n".join(lines)
 
 
 @dataclass
 class PlaybookResult:
+    data: dict
     markdown: str
     input_tokens: int
     output_tokens: int
 
     def as_dict(self) -> dict:
         return {
+            "data": self.data,
             "markdown": self.markdown,
             "usage": {"input_tokens": self.input_tokens, "output_tokens": self.output_tokens},
         }
@@ -247,7 +272,7 @@ def generate_playbook(report: dict, examples: list[dict]) -> PlaybookResult:
         if value is not None
     )
     sample = "\n\n".join(
-        f"<prompt score=\"{e['score']}\">\n{e['preview']}\n</prompt>" for e in examples[:3]
+        f"<prompt score=\"{e['score']}\">\n{e['preview']}\n</prompt>" for e in examples[:4]
     )
 
     user = (
@@ -259,28 +284,35 @@ def generate_playbook(report: dict, examples: list[dict]) -> PlaybookResult:
     )
 
     try:
-        # Streaming: a playbook is long enough to risk a request timeout.
-        with client.messages.stream(
+        response = client.messages.parse(
             model=MODEL,
             max_tokens=PLAYBOOK_MAX_TOKENS,
             system=PLAYBOOK_SYSTEM,
             thinking={"type": "adaptive"},
             output_config={"effort": "high"},
             messages=[{"role": "user", "content": user}],
-        ) as stream:
-            response = stream.get_final_message()
+            output_format=PlaybookContent,
+        )
     except Exception as exc:
         raise LLMUnavailable(str(exc)) from exc
 
     if response.stop_reason == "refusal":
         raise LLMUnavailable("the model declined to generate a playbook")
 
-    markdown = "\n".join(b.text for b in response.content if b.type == "text").strip()
-    if not markdown:
-        raise LLMUnavailable("the model returned no text")
+    parsed = response.parsed_output
+    if parsed is None:
+        raise LLMUnavailable("the model returned no parseable output")
+
+    data = parsed.model_dump()
+    # Pair each rewrite with the prompt it came from, by position.
+    for rewrite, example in zip(data["rewrites"], examples):
+        rewrite["original"] = example.get("preview", "")
+        rewrite["score"] = example.get("score")
+        rewrite["prompt_id"] = example.get("id")
 
     return PlaybookResult(
-        markdown=markdown,
+        data=data,
+        markdown=render_playbook_markdown(data),
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
     )

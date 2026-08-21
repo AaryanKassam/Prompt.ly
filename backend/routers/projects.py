@@ -166,24 +166,37 @@ def get_playbook(
     db: DbSession = Depends(get_session),
 ) -> dict:
     """Return a stored playbook, if one has been generated for this project."""
-    from ..models import Playbook
     from ..llm import available
+    from ..models import Playbook
 
     resolved = _resolve_path(path)
     row = db.scalar(select(Playbook).where(Playbook.project_path == resolved))
-    payload, _ = cached_report(db, resolved)
-    current = fingerprint(db, resolved)
+    report, _ = cached_report(db, resolved)
+    current_count = report["totals"]["scored_prompts"]
 
     if row is None:
-        return {"exists": False, "llm_available": available(), "project_path": resolved}
+        return {
+            "exists": False,
+            "llm_available": available(),
+            "project_path": resolved,
+            "prompt_count": current_count,
+        }
+
+    # Report how many prompts are new rather than a bare "stale" flag: the
+    # refresh costs an API call, so the user needs to judge whether it's worth it.
+    generated_at_count = row.prompt_count or 0
     return {
         "exists": True,
         "llm_available": available(),
         "project_path": resolved,
+        "data": row.data,
         "markdown": row.markdown,
         "generated_at": row.generated_at,
         "model": row.model,
-        "stale": row.fingerprint != current,
+        "prompt_count": current_count,
+        "generated_at_prompt_count": generated_at_count,
+        "new_prompts": max(0, current_count - generated_at_count),
+        "stale": row.fingerprint != fingerprint(db, resolved),
         "usage": {"input_tokens": row.input_tokens, "output_tokens": row.output_tokens},
     }
 
@@ -212,7 +225,13 @@ def create_playbook(
     current = fingerprint(db, resolved)
     row = db.scalar(select(Playbook).where(Playbook.project_path == resolved))
     if row is not None and row.fingerprint == current and not force:
-        return {"markdown": row.markdown, "cached": True, "generated_at": row.generated_at}
+        return {
+            "data": row.data,
+            "markdown": row.markdown,
+            "cached": True,
+            "generated_at": row.generated_at,
+            "new_prompts": 0,
+        }
 
     try:
         result = generate_playbook(report, report.get("worst_prompts", []))
@@ -226,15 +245,19 @@ def create_playbook(
         db.add(row)
     else:
         row.fingerprint, row.markdown = current, result.markdown
+    row.data = result.data
+    row.prompt_count = report["totals"]["scored_prompts"]
     row.model = MODEL
     row.input_tokens = result.input_tokens
     row.output_tokens = result.output_tokens
     db.commit()
 
     return {
+        "data": result.data,
         "markdown": result.markdown,
         "cached": False,
         "generated_at": row.generated_at,
+        "new_prompts": 0,
         "usage": result.as_dict()["usage"],
     }
 

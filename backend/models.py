@@ -154,6 +154,12 @@ class Playbook(Base):
 
     fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
     markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    # Structured form: the pattern, per-prompt rewrites, and a reusable
+    # template. The UI expands one rewrite at a time, so prose alone won't do.
+    data: Mapped[Optional[dict]] = mapped_column(JSON)
+    # Prompts counted at generation time, so the UI can say how many are new
+    # rather than just "stale".
+    prompt_count: Mapped[Optional[int]] = mapped_column(Integer)
     model: Mapped[Optional[str]] = mapped_column(String(80))
     input_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer)
