@@ -199,10 +199,64 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_clipboard() -> str:
+    """Clipboard contents, so a drafted prompt can be scored without re-typing."""
+    import shutil
+    import subprocess
+
+    for cmd in (["pbpaste"], ["wl-paste"], ["xclip", "-selection", "clipboard", "-o"], ["xsel", "-b"]):
+        if shutil.which(cmd[0]):
+            try:
+                return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+            except (subprocess.SubprocessError, OSError):
+                continue
+    return ""
+
+
+def _read_editor() -> str:
+    """Open $EDITOR for a long prompt that would be awkward to quote in a shell."""
+    import os
+    import subprocess
+    import tempfile
+
+    editor = os.getenv("EDITOR") or os.getenv("VISUAL") or "nano"
+    with tempfile.NamedTemporaryFile("w+", suffix=".md", delete=False) as fh:
+        fh.write("# Write your prompt below. Lines starting with # are ignored.\n\n")
+        temp = fh.name
+    try:
+        subprocess.call([*editor.split(), temp])
+        body = Path(temp).read_text()
+    finally:
+        Path(temp).unlink(missing_ok=True)
+    return "\n".join(l for l in body.splitlines() if not l.startswith("#"))
+
+
 def cmd_score(args: argparse.Namespace) -> int:
-    text = args.text or sys.stdin.read()
+    if args.clipboard:
+        text = _read_clipboard()
+        if not text.strip():
+            console.print("[red]Clipboard is empty.[/red]")
+            return 1
+        console.print(f"[grey50]Scoring {len(text.split())} words from the clipboard.[/grey50]\n")
+    elif args.editor:
+        text = _read_editor()
+    else:
+        # Reading stdin when it is a TTY would hang waiting for input the user
+        # doesn't know to give, so guide them instead.
+        text = args.text
+        if text is None:
+            if sys.stdin.isatty():
+                console.print(
+                    "[red]Nothing to score.[/red]\n\n"
+                    "  promptly score \"your prompt\"   [grey50]text inline[/grey50]\n"
+                    "  promptly score -c              [grey50]score whatever you just copied[/grey50]\n"
+                    "  promptly score -e              [grey50]write it in $EDITOR[/grey50]\n"
+                    "  cat draft.txt | promptly score [grey50]from a file[/grey50]"
+                )
+                return 1
+            text = sys.stdin.read()
     if not text.strip():
-        console.print("[red]Nothing to score.[/red] Pass text or pipe it in.")
+        console.print("[red]Nothing to score.[/red]")
         return 1
 
     result = score_text(text)
@@ -743,27 +797,92 @@ def cmd_workspaces(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 
+# Commands grouped by when you'd reach for them, rather than alphabetically —
+# `promptly --help` already lists them flatly and that isn't much use when you
+# can't remember which of eleven names you want.
+COMMAND_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
+    ("Before you send a prompt", [
+        ("score \"...\"", "s", "Grade a draft 0-10, with fixes"),
+        ("score -c", "", "Score what you just copied"),
+        ("score -e", "", "Compose in $EDITOR, then score"),
+    ]),
+    ("How you're doing", [
+        ("report [path]", "r", "Report for a folder (default: this one)"),
+        ("projects", "p", "Every tracked folder"),
+        ("watch", "w", "Live report, refreshes as you work"),
+    ]),
+    ("Sharing", [
+        ("share", "", "Redacted report, safe to send"),
+        ("share --anonymize", "", "...with the folder name hidden"),
+    ]),
+    ("Setup and upkeep", [
+        ("doctor", "check", "Check the setup, and how to fix it"),
+        ("sync", "", "Import new sessions now"),
+        ("install-hook", "", "Import automatically after each session"),
+    ]),
+    ("Occasional", [
+        ("validate", "", "Measure the scorer against a benchmark"),
+        ("reclassify", "", "Re-label and rescore after an upgrade"),
+        ("workspaces", "", "Folders open in VS Code / Cursor"),
+    ]),
+]
+
+
+def print_overview() -> None:
+    """Friendly command list — what `promptly` alone and `promptly help` show."""
+    console.print()
+    console.print("  [bold]promptly[/bold] [grey50]— how well are you prompting?[/grey50]")
+
+    for heading, rows in COMMAND_GROUPS:
+        console.print(f"\n  [grey50]{heading}[/grey50]")
+        table = Table(box=None, pad_edge=False, show_header=False)
+        table.add_column(width=2)
+        table.add_column(width=22)
+        table.add_column(width=6, style="grey37")
+        table.add_column()
+        for name, alias, desc in rows:
+            table.add_row("", Text(name, style="white"),
+                          Text(alias, style="grey37"), Text(desc, style="grey62"))
+        console.print(table)
+
+    console.print(
+        "\n  [grey37]Short forms shown in the third column. "
+        "Add --json to most commands for scripting.[/grey37]"
+    )
+    console.print("  [grey37]Full flags for any command: promptly <command> --help[/grey37]\n")
+
+
+def cmd_help(args: argparse.Namespace) -> int:
+    print_overview()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="promptly", description=__doc__.split("\n")[0])
-    sub = parser.add_subparsers(dest="command", required=True)
+    # Not required: bare `promptly` prints the overview instead of an error.
+    sub = parser.add_subparsers(dest="command")
 
     def add_common(p, sync=True):
         p.add_argument("--json", action="store_true", help="machine-readable output")
         if sync:
             p.add_argument("--no-sync", action="store_true", help="skip importing new logs first")
 
-    p_report = sub.add_parser("report", help="prompt report for a folder")
+    p_report = sub.add_parser("report", aliases=["r"], help="prompt report for a folder")
     p_report.add_argument("path", nargs="?", help="folder (defaults to the current directory)")
     p_report.add_argument("--refresh", action="store_true", help="rebuild, ignoring the cache")
     add_common(p_report)
     p_report.set_defaults(func=cmd_report)
 
-    p_score = sub.add_parser("score", help="score a draft prompt")
+    p_score = sub.add_parser("score", aliases=["s"], help="score a draft prompt")
     p_score.add_argument("text", nargs="?", help="prompt text (or pipe it on stdin)")
+    p_score.add_argument("-c", "--clipboard", action="store_true",
+                         help="score the clipboard contents")
+    p_score.add_argument("-e", "--editor", action="store_true",
+                         help="compose the prompt in $EDITOR, then score it")
     add_common(p_score, sync=False)
     p_score.set_defaults(func=cmd_score)
 
-    p_projects = sub.add_parser("projects", help="every tracked folder")
+    p_projects = sub.add_parser("projects", aliases=["p", "ls"], help="every tracked folder")
     add_common(p_projects)
     p_projects.set_defaults(func=cmd_projects)
 
@@ -771,7 +890,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.add_argument("--json", action="store_true")
     p_sync.set_defaults(func=cmd_sync)
 
-    p_watch = sub.add_parser("watch", help="live-updating report")
+    p_watch = sub.add_parser("watch", aliases=["w"], help="live-updating report")
     p_watch.add_argument("path", nargs="?")
     p_watch.add_argument("--interval", type=float, default=10.0, help="seconds between refreshes")
     p_watch.add_argument("--compact", action="store_true", help="score and factors only")
@@ -787,7 +906,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rc.add_argument("--json", action="store_true")
     p_rc.set_defaults(func=cmd_reclassify)
 
-    p_doc = sub.add_parser("doctor", help="check every part of the setup")
+    p_doc = sub.add_parser("doctor", aliases=["check"], help="check every part of the setup")
     p_doc.add_argument("--json", action="store_true")
     p_doc.set_defaults(func=cmd_doctor)
 
@@ -803,6 +922,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_val.add_argument("--json", action="store_true")
     p_val.set_defaults(func=cmd_validate)
 
+    p_help = sub.add_parser("help", help="list every command")
+    p_help.set_defaults(func=cmd_help)
+
     p_ws = sub.add_parser("workspaces", help="folders open in VS Code / Cursor")
     p_ws.add_argument("--json", action="store_true")
     p_ws.set_defaults(func=cmd_workspaces)
@@ -812,6 +934,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if getattr(args, "func", None) is None:
+        print_overview()
+        return 0
     init_db()
     return args.func(args)
 

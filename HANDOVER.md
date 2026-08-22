@@ -147,18 +147,42 @@ learning to reproduce that heuristic. It is **not active in scoring** —
 ## Terminal CLI
 
 ```bash
-ln -s "$PWD/scripts/promptly" /usr/local/bin/promptly   # once
-promptly install-hook                                   # once — auto-import after every session
-
-promptly report            # report for the current directory
-promptly report ~/proj     # ...or a named folder
-promptly score "fix it"    # grade a draft prompt (also reads stdin)
-promptly projects          # all tracked folders, current one marked
-promptly watch             # live view; leave it open in a split
-promptly sync              # import logs manually
+ln -s "$PWD/scripts/promptly" ~/.local/bin/promptly   # once
+promptly install-hook                                 # once — auto-import after each session
+promptly                                              # the command list
 ```
 
-The launcher re-execs under the repo venv, so it works from any directory regardless of which Python is active. Every command re-imports logs first (`--no-sync` to skip). `--json` on `report`/`score`/`projects` is what the VS Code extension consumes.
+### Scoring a prompt before you send it
+
+```bash
+promptly score "fix the parser"      # inline
+promptly score -c                    # score the clipboard
+promptly score -e                    # compose in $EDITOR
+cat draft.txt | promptly score       # from a file or a pipe
+```
+
+`-c` is the one to reach for: draft in whatever you're using, copy, score, fix,
+send. Running bare `promptly score` at a terminal prints these four forms rather
+than silently blocking on stdin.
+
+### Everything else
+
+| Command | Short | What |
+|---|---|---|
+| `promptly report [path]` | `r` | Report for a folder, defaulting to the current one |
+| `promptly projects` | `p`, `ls` | Every tracked folder |
+| `promptly watch` | `w` | Live report, refreshes as you work |
+| `promptly share` | | Redacted report safe to send (`--anonymize` hides the folder name) |
+| `promptly doctor` | `check` | Check the setup and print the fix for anything broken |
+| `promptly sync` | | Import new sessions now |
+| `promptly validate` | | Measure the scorer against the benchmark |
+| `promptly reclassify` | | Re-label and rescore after an upgrade |
+
+Bare `promptly` (or `promptly help`) prints these grouped by when you'd want
+them. `--json` works on most commands and is what the VS Code extension consumes.
+
+The launcher re-execs under the repo venv, so it works from any directory
+regardless of which Python is active.
 
 ---
 
