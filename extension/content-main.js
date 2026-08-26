@@ -44,9 +44,35 @@
     }
   }
 
-  function parseSSEText(text) {
+  // Pull the latest user message text out of a request body, so we can (opt-in)
+  // store the actual prompt. Mirrors estimateInputTokens' body handling.
+  function extractPromptText(bodyStr) {
+    if (!bodyStr) return '';
+    try {
+      const body = JSON.parse(bodyStr);
+      if (typeof body.prompt === 'string') return body.prompt;
+      if (Array.isArray(body.messages)) {
+        const userMsgs = body.messages.filter(m => m.role === 'user');
+        const last = userMsgs[userMsgs.length - 1];
+        if (last) {
+          return Array.isArray(last.content)
+            ? last.content.filter(c => c.type === 'text').map(c => c.text).join(' ')
+            : String(last.content || '');
+        }
+      }
+      return '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // Parse an SSE stream into { text, tokens, messageId }. The full response text
+  // is already accumulated here; we now return it (not just a token count) plus
+  // the messageId from the message_start event.
+  function parseSSE(text) {
     let deltaText = '';
     let lastCompletion = '';
+    let messageId = null;
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('data: ')) continue;
@@ -54,6 +80,7 @@
       if (raw === '[DONE]') continue;
       try {
         const ev = JSON.parse(raw);
+        if (ev.type === 'message_start' && ev.message?.id) messageId = ev.message.id;
         if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
           deltaText += ev.delta.text || '';
         }
@@ -62,17 +89,29 @@
       } catch (_) {}
     }
     const out = deltaText.length >= lastCompletion.length ? deltaText : lastCompletion;
-    return estimate(out);
+    return { text: out, tokens: estimate(out), messageId };
   }
 
-  function postData(conversationId, inputTokens, outputTokens) {
+  // The MAIN-world script always emits prompt/response text; the isolated
+  // content script + background apply the captureText gate before persisting or
+  // sending anything off the page.
+  function postData(conversationId, inputTokens, sse, promptText) {
     const conversationTitle = document.title
       .replace(/\s*[-|]\s*Claude\s*$/, '').trim() || 'Untitled';
     window.postMessage(
       {
         type:    'PROMPT_REPORT_DATA',
         source:  'prompt-report-ext',
-        payload: { conversationId, conversationTitle, timestamp: Date.now(), inputTokens, outputTokens },
+        payload: {
+          conversationId,
+          conversationTitle,
+          timestamp: Date.now(),
+          inputTokens,
+          outputTokens: sse.tokens,
+          promptText:   promptText || '',
+          responseText: sse.text || '',
+          messageId:    sse.messageId || null,
+        },
       },
       '*'
     );
@@ -90,11 +129,13 @@
 
   XMLHttpRequest.prototype.send = function (body) {
     if (this._prUrl && isCompletionURL(this._prUrl)) {
-      const inputTokens    = estimateInputTokens(typeof body === 'string' ? body : '');
+      const bodyStr        = typeof body === 'string' ? body : '';
+      const inputTokens    = estimateInputTokens(bodyStr);
+      const promptText     = extractPromptText(bodyStr);
       const conversationId = extractConvId(this._prUrl);
       const handler = () => {
         this.removeEventListener('loadend', handler);
-        postData(conversationId, inputTokens, parseSSEText(this.responseText || ''));
+        postData(conversationId, inputTokens, parseSSE(this.responseText || ''), promptText);
       };
       this.addEventListener('loadend', handler);
     }
@@ -125,6 +166,7 @@
     }
 
     const inputTokens    = estimateInputTokens(bodyStr);
+    const promptText     = extractPromptText(bodyStr);
     const conversationId = extractConvId(url);
     const response       = await _originalFetch.apply(this, args);
 
@@ -143,10 +185,10 @@
             accumulated += decoder.decode(value, { stream: true });
           }
           accumulated += decoder.decode();
-          postData(conversationId, inputTokens, parseSSEText(accumulated));
+          postData(conversationId, inputTokens, parseSSE(accumulated), promptText);
         } catch (_) {
           if (accumulated.length > 0) {
-            postData(conversationId, inputTokens, parseSSEText(accumulated));
+            postData(conversationId, inputTokens, parseSSE(accumulated), promptText);
           }
         }
       })();
@@ -159,7 +201,7 @@
     }
 
     response.clone().text().then(text => {
-      postData(conversationId, inputTokens, parseSSEText(text));
+      postData(conversationId, inputTokens, parseSSE(text), promptText);
     }).catch(() => {});
 
     return response;

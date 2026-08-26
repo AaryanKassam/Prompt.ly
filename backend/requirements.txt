@@ -1,0 +1,20 @@
+# Web framework (added in Phase 1 step 5)
+fastapi
+uvicorn[standard]
+
+# Database
+SQLAlchemy>=2.0
+# Postgres driver (used when DATABASE_URL points at postgres; SQLite needs nothing)
+psycopg2-binary
+
+# Config
+python-dotenv
+
+# --- Optional ML deps (Phase 5 MLP scorer) ---
+# The backend runs without these; they're only needed to train/run the MLP.
+# Install with: pip install sentence-transformers torch numpy
+# sentence-transformers
+# torch
+# numpy
+# faiss-cpu   # Phase 6 vector search
+# alembic     # Phase 3+ Postgres migrations
