@@ -124,6 +124,11 @@ function styles() {
     .rec p { margin: 0; font-size: 12px; line-height: 1.45; }
     .prompt { display: flex; gap: 8px; padding: 6px 0; font-size: 11px; }
     .prompt .s { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 22px; }
+    .tokens { display: flex; gap: 10px; margin-bottom: 4px; }
+    .tokens > div { flex: 1; min-width: 0; }
+    .tokens b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .tokens span { display: block; font-size: 10px; color: var(--vscode-descriptionForeground);
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .prompt .t { color: var(--vscode-descriptionForeground); line-height: 1.4; }
     button {
       width: 100%; margin-top: 14px; padding: 6px 10px; cursor: pointer;
@@ -199,6 +204,13 @@ function errorHtml(message) {
   );
 }
 
+function compactNum(n) {
+  if (n === null || n === undefined) return "—";
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+  return String(n);
+}
+
 function reportHtml(report) {
   const t = report.totals;
   if (!t || t.prompts === 0) {
@@ -225,6 +237,16 @@ function reportHtml(report) {
       </div>`,
     )
     .join("");
+
+  const econ = report.token_economics || {};
+  const tokens = econ.prompts_with_tokens
+    ? `<div class="eyebrow">Token cost</div>
+       <div class="tokens">
+         <div><b>${compactNum(econ.total_tokens)}</b><span>total</span></div>
+         <div><b>${compactNum(econ.median_output_per_prompt)}</b><span>median reply</span></div>
+         <div><b>${compactNum(econ.output_per_file_changed)}</b><span>per file</span></div>
+       </div>`
+    : "";
 
   const trend = report.trend
     ? `<span style="color:${
@@ -264,6 +286,8 @@ function reportHtml(report) {
      <div class="sub">${trend}${t.scored_prompts} prompts · ${t.sessions} session${t.sessions === 1 ? "" : "s"}</div>
 
      <div class="eyebrow">Factors</div>${factors}
+
+     ${tokens}
 
      ${recs ? `<div class="eyebrow">Do these next</div>${recs}` : ""}
      ${worst ? `<div class="eyebrow">Lowest-scoring prompts</div>${worst}` : ""}

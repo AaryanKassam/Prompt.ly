@@ -95,15 +95,23 @@ def prompt_report(path: str | None = None, refresh: bool = False) -> str:
 @mcp.tool(
     description=(
         "Score a draft prompt 0-10 across clarity, specificity, context, constraints, "
-        "scope and examples, with concrete suggestions — use before sending a prompt."
+        "scope, examples and token efficiency, and project what it will cost in "
+        "tokens — use before sending a prompt."
     )
 )
 def score_draft_prompt(text: str) -> str:
     from backend.reports import RECOMMENDATIONS, grade
 
+    from backend.reports import estimate_prompt_cost
+
     result = score(text)
+    cost = estimate_prompt_cost(text)
     lines = [
         f"**{result.overall:.1f}/10** ({grade(result.overall)})",
+        "",
+        f"Projected cost: **{cost['prompt_tokens']:,} tokens to send** → "
+        f"**~{cost['projected_output_tokens']:,} tokens back**"
+        + ("  (reply size capped)" if cost["bounded"] else ""),
         "",
     ]
     for factor, value in sorted(result.factors.items(), key=lambda kv: kv[1]):

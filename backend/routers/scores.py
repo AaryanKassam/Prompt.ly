@@ -36,6 +36,7 @@ def get_score(prompt_id: str, db: DbSession = Depends(get_session)) -> dict:
             "constraints": score.constraints,
             "scope": score.scope,
             "examples": score.examples,
+            "efficiency": score.efficiency,
         },
         "signals": extract_signals(prompt.text or ""),
         "model_phase": score.model_phase,

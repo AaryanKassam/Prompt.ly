@@ -16,12 +16,13 @@ import { CheckIcon, ChevronRightIcon } from "./icons";
  * number is traceable to specific things the user wrote.
  */
 const FACTORS: { key: string; weight: number }[] = [
-  { key: "clarity", weight: 0.25 },
-  { key: "specificity", weight: 0.2 },
-  { key: "context", weight: 0.2 },
-  { key: "constraints", weight: 0.15 },
-  { key: "scope", weight: 0.1 },
-  { key: "examples", weight: 0.1 },
+  { key: "clarity", weight: 0.22 },
+  { key: "specificity", weight: 0.18 },
+  { key: "context", weight: 0.17 },
+  { key: "efficiency", weight: 0.15 },
+  { key: "constraints", weight: 0.13 },
+  { key: "scope", weight: 0.09 },
+  { key: "examples", weight: 0.06 },
 ];
 
 function Evidence({ factor, path }: { factor: string; path?: string }) {

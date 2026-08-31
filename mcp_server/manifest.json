@@ -4,7 +4,7 @@
   "display_name": "Prompt.ly",
   "version": "1.0.0",
   "description": "Scores how effectively you prompt Claude, per project folder.",
-  "long_description": "Prompt.ly reads the Claude Code session logs already on your machine, scores every prompt 0-10 across clarity, specificity, context, constraints, scope and examples, and reports how you're doing in whichever folder you have open in VS Code. Reports are cached, so re-opening a project is instant. Nothing leaves your machine.",
+  "long_description": "Prompt.ly reads the Claude Code session logs already on your machine, scores every prompt 0-10 across clarity, specificity, context, constraints, scope, examples and token efficiency, tracks what each turn actually cost in tokens, and reports how you're doing in whichever folder you have open in VS Code. Reports are cached, so re-opening a project is instant. Nothing leaves your machine.",
   "author": {
     "name": "Aaryan Kassam",
     "url": "https://github.com/AaryanKassam/Prompt.ly"

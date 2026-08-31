@@ -37,6 +37,7 @@ from .reports import (
     cached_report,
     grade,
     import_sessions,
+    estimate_prompt_cost,
 )
 from .workspace import detect_active_workspace, list_open_workspaces
 
@@ -134,6 +135,48 @@ def render_report(payload: dict, compact: bool = False) -> Group:
         Panel(head, title=f"[bold]{name}[/bold]", border_style="grey30", padding=(0, 1)),
         Panel(factors, title="factors", border_style="grey30", padding=(0, 1)),
     ]
+
+    econ = payload.get("token_economics") or {}
+    if econ.get("prompts_with_tokens"):
+        cost = Table.grid(padding=(0, 2))
+        cost.add_column(justify="right", style="grey62", width=18)
+        cost.add_column()
+        cost.add_row("total tokens", Text(f"{econ['total_tokens']:,}", style="bold white"))
+        cost.add_row(
+            "context / output",
+            Text(f"{econ['context_tokens']:,} · {econ['output_tokens']:,}", style="grey62"),
+        )
+        band_style = {"lean": "green", "typical": "yellow", "heavy": "red"}.get(
+            econ["cost_band"], "grey50"
+        )
+        cost.add_row(
+            "median per prompt",
+            Text(f"{econ['median_output_per_prompt']:,} out", style=band_style)
+            + Text(f"  ({econ['cost_band']})", style="grey50"),
+        )
+        if econ.get("output_per_file_changed"):
+            cost.add_row(
+                "per file changed",
+                Text(f"{econ['output_per_file_changed']:,} out", style="grey62"),
+            )
+        blocks.append(Panel(cost, title="token cost", border_style="grey30", padding=(0, 1)))
+
+        if econ.get("most_expensive") and not compact:
+            limit = max(20, console.width - 24)
+            pricey = Table.grid(padding=(0, 2))
+            pricey.add_column(width=9, justify="right")
+            pricey.add_column()
+            for p in econ["most_expensive"]:
+                preview = p["preview"]
+                if len(preview) > limit:
+                    preview = preview[: limit - 1] + "\u2026"
+                pricey.add_row(
+                    Text(f"{p['output_tokens']:,}", style="red"),
+                    Text(preview, style="grey62"),
+                )
+            blocks.append(
+                Panel(pricey, title="most expensive turns", border_style="grey30", padding=(0, 1))
+            )
 
     if payload["recommendations"] and not compact:
         recs = Table.grid(padding=(0, 1))
@@ -269,6 +312,7 @@ def cmd_score(args: argparse.Namespace) -> int:
                     "factors": result.factors,
                     "signals": result.signals,
                     "model_phase": result.model_phase,
+                    "cost": estimate_prompt_cost(text),
                 }
             )
         )
@@ -286,9 +330,22 @@ def cmd_score(args: argparse.Namespace) -> int:
     for factor, value in sorted(result.factors.items(), key=lambda kv: kv[1]):
         factors.add_row(factor, bar(value), Text(f"{value:.1f}", style=tone(value)))
 
+    cost = estimate_prompt_cost(text)
+    cost_line = Text()
+    cost_line.append(f"{cost['prompt_tokens']:,}", style="bold white")
+    cost_line.append(" tokens to send  ", style="grey50")
+    cost_line.append("→  ~", style="grey50")
+    cost_line.append(f"{cost['projected_output_tokens']:,}", style="bold white")
+    cost_line.append(" tokens back", style="grey50")
+    if cost["bounded"]:
+        cost_line.append("   (you capped the reply)", style="green")
+    elif cost["band"] == "verbose":
+        cost_line.append("   (long prompts draw long answers)", style="yellow")
+
     blocks = [
         Panel(head, title="prompt score", border_style="grey30", padding=(0, 1)),
         Panel(factors, title="factors", border_style="grey30", padding=(0, 1)),
+        Panel(cost_line, title="projected token cost", border_style="grey30", padding=(0, 1)),
     ]
 
     missed = [

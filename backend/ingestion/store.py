@@ -19,6 +19,8 @@ class ImportResult:
     sessions_updated: int = 0
     prompts_created: int = 0
     prompts_scored: int = 0
+    # Existing turns whose token columns were backfilled from the log.
+    prompts_updated: int = 0
 
 
 def score_and_attach(db: DbSession, prompt: Prompt) -> Score | None:
@@ -73,13 +75,21 @@ def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -
         result.sessions_updated += 1
 
     existing_turns = {
-        row[0] for row in db.execute(
-            select(Prompt.turn_index).where(Prompt.session_id == session.id)
-        )
+        row.turn_index: row
+        for row in db.scalars(select(Prompt).where(Prompt.session_id == session.id))
     }
 
     for p in parsed.prompts:
-        if p.turn_index in existing_turns:
+        prior = existing_turns.get(p.turn_index)
+        if prior is not None:
+            # Already imported. Token columns added after the first release are
+            # still backfilled, so historical turns don't report zero cost
+            # forever — re-parsing the log is the only place these values exist.
+            if prior.cache_read_tokens is None and p.cache_read_tokens:
+                prior.cache_read_tokens = p.cache_read_tokens
+                result.prompts_updated += 1
+            if prior.cache_creation_tokens is None and p.cache_creation_tokens:
+                prior.cache_creation_tokens = p.cache_creation_tokens
             continue
         prompt = Prompt(
             session_id=session.id,
@@ -90,6 +100,8 @@ def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -
             model=p.model,
             input_tokens=p.input_tokens or None,
             output_tokens=p.output_tokens or None,
+            cache_read_tokens=p.cache_read_tokens or None,
+            cache_creation_tokens=p.cache_creation_tokens or None,
             timestamp=p.timestamp,
             tool_calls=p.tool_calls or None,
             file_diffs=p.file_diffs(),

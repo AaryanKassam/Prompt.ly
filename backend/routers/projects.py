@@ -116,7 +116,7 @@ def project_report(
 
 @router.get("/factor")
 def factor_detail(
-    factor: str = Query(..., description="clarity | specificity | context | constraints | scope | examples"),
+    factor: str = Query(..., description="clarity | specificity | context | constraints | scope | examples | efficiency"),
     path: str | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
     db: DbSession = Depends(get_session),

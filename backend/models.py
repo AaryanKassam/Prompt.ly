@@ -73,6 +73,10 @@ class Prompt(Base):
 
     input_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    # Cached context is billed separately and dwarfs input_tokens in practice,
+    # so token-efficiency figures are wrong without it.
+    cache_read_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    cache_creation_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     tool_calls: Mapped[Optional[list]] = mapped_column(JSON)   # array of tool call objects
@@ -112,6 +116,7 @@ class Score(Base):
     constraints: Mapped[Optional[float]] = mapped_column(Float)
     scope: Mapped[Optional[float]] = mapped_column(Float)
     examples: Mapped[Optional[float]] = mapped_column(Float)
+    efficiency: Mapped[Optional[float]] = mapped_column(Float)
 
     model_phase: Mapped[Optional[int]] = mapped_column(Integer)  # 1=rubric, 2=MLP, 3=fine-tuned
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

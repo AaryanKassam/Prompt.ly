@@ -29,6 +29,7 @@ FACTOR_MEANING = {
     "constraints": "Bounds the work — what not to change, where to stop",
     "scope": "One task per request, sized to be reviewable",
     "examples": "Shows code, errors, or a concrete input/output case",
+    "efficiency": "Spends tokens sparingly and bounds the size of the reply",
 }
 
 
@@ -57,6 +58,21 @@ def redacted_payload(report: dict, anonymize: bool = False) -> dict:
             "tool_calls": totals.get("tool_calls", 0),
             "files_touched": totals.get("files_touched", 0),
             "output_tokens": totals.get("output_tokens", 0),
+        },
+        # Aggregate token cost. Copied field by field, and deliberately without
+        # `most_expensive` — those entries carry prompt previews, which is
+        # exactly what this report exists to keep out.
+        "token_economics": {
+            key: (report.get("token_economics") or {}).get(key)
+            for key in (
+                "context_tokens",
+                "output_tokens",
+                "total_tokens",
+                "median_output_per_prompt",
+                "output_per_file_changed",
+                "output_per_tool_call",
+                "cost_band",
+            )
         },
         "factors": [
             {
@@ -149,6 +165,27 @@ def render_html(payload: dict, benchmark: dict | None = None) -> str:
         )
 
     v = payload["volume"]
+    econ = payload.get("token_economics") or {}
+
+    def _fmt(key: str) -> str:
+        val = econ.get(key)
+        return f"{val:,}" if isinstance(val, int) else "—"
+
+    token_section = ""
+    if econ.get("total_tokens"):
+        token_section = f"""
+<h2>Token cost</h2>
+<div class="stats">
+  <div class="stat"><div class="k">Total tokens</div><div class="v">{_fmt('total_tokens')}</div></div>
+  <div class="stat"><div class="k">Context (cached)</div><div class="v">{_fmt('context_tokens')}</div></div>
+  <div class="stat"><div class="k">Generated</div><div class="v">{_fmt('output_tokens')}</div></div>
+  <div class="stat"><div class="k">Median per prompt</div><div class="v">{_fmt('median_output_per_prompt')}</div></div>
+  <div class="stat"><div class="k">Per file changed</div><div class="v">{_fmt('output_per_file_changed')}</div></div>
+</div>
+<div class="note">Cost per file changed normalises spend by work delivered, so a
+one-line fix and a refactor can be compared. Spend band for this project:
+<strong>{html.escape(str(econ.get('cost_band', 'unknown')))}</strong>.</div>
+"""
     bench_html = ""
     if benchmark:
         bench_html = f"""
@@ -249,6 +286,7 @@ def render_html(payload: dict, benchmark: dict | None = None) -> str:
   <div class="stat"><div class="k">Output tokens</div><div class="v">{v['output_tokens']:,}</div></div>
 </div>
 
+{token_section}
 <h2>Habit frequency — share of prompts meeting each signal</h2>
 <table><tbody>{habit_rows}</tbody></table>
 

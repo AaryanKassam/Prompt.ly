@@ -44,6 +44,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("prompts", "project_path", "TEXT"),
     ("playbooks", "data", "JSON"),
     ("playbooks", "prompt_count", "INTEGER"),
+    ("prompts", "cache_read_tokens", "INTEGER"),
+    ("prompts", "cache_creation_tokens", "INTEGER"),
+    ("scores", "efficiency", "FLOAT"),
 ]
 
 

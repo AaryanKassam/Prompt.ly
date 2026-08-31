@@ -2,7 +2,7 @@
 
 Scores how effectively you prompt Claude, per project — then shows you how to improve.
 
-Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across six quality factors, and reports how you're doing in whichever project you're working on. It runs entirely locally.
+Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across seven factors — six for quality, one for token efficiency — and reports how you're doing in whichever project you're working on. It runs entirely locally.
 
 ![Prompt.ly dashboard](docs/dashboard.png)
 
@@ -12,7 +12,7 @@ Prompt.ly reads the Claude Code session logs already on your machine, grades eve
 
 Everyone using an AI coding assistant is writing dozens of prompts a day, and nobody gets feedback on any of them. A vague prompt costs a search, a wrong guess, and a round trip — but that cost is invisible, so the habit never changes.
 
-Prompt.ly makes it visible. It found that 96% of my prompts never paste the actual error, and 88% never name a file.
+Prompt.ly makes it visible — in both directions. It found that 97% of my prompts never paste the actual error and 90% never name a file, and that a single two-word prompt (`"do both"`) cost 57,303 output tokens.
 
 ---
 
@@ -22,7 +22,7 @@ All four read the same database and call the same scoring engine, so they can ne
 
 | Surface | Best for |
 |---|---|
-| **Terminal** | Scoring a draft *before* you send it; cwd-aware reports |
+| **Terminal** | Scoring a draft *before* you send it, with its projected token cost; cwd-aware reports |
 | **VS Code** | A sidebar score for the project you're in, while you work |
 | **Claude app** | Asking "how's my prompting?" in conversation |
 | **Dashboard** | Deep dives, expandable factors, the playbook, sharing |
@@ -45,6 +45,16 @@ backend/venv/bin/python scripts/import_jsonl.py    # import your history
 
 That's the whole setup. Your existing Claude Code sessions are now scored.
 
+### The three commands you'll actually use
+
+```bash
+promptly score "your draft prompt"   # rate + token cost BEFORE you send it
+promptly report                      # how you're prompting in this folder
+./scripts/dev                        # launch the dashboard at localhost:3000
+```
+
+Everything else is optional.
+
 Two optional extras, each only needed for one thing:
 
 ```bash
@@ -63,6 +73,8 @@ promptly                                              # see every command
 
 `install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run.
 
+> **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) and picks up the symlink above. Run the same `promptly` commands there as in Terminal.app — one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
+
 **Score a prompt before you send it** — the thing only the terminal can do:
 
 ```bash
@@ -71,6 +83,16 @@ promptly score -c                  # score whatever you just copied
 promptly score -e                  # compose in $EDITOR
 cat draft.txt | promptly score     # from a file
 ```
+
+It prints the score, the factor breakdown, and a projected token cost:
+
+```
+╭──────────────────────── projected token cost ────────────────────────╮
+│ 17 tokens to send  →  ~1,980 tokens back   (you capped the reply)    │
+╰──────────────────────────────────────────────────────────────────────╯
+```
+
+The projection comes from the median output observed for prompts with the same efficiency signals. It is a guide, not a guarantee — a short prompt that kicks off a large refactor will sail straight past it.
 
 Then the rest:
 
@@ -82,6 +104,7 @@ Then the rest:
 | `promptly share` | | Redacted report safe to send to someone else |
 | `promptly doctor` | `check` | Check the setup and print the fix for anything broken |
 | `promptly sync` | | Import new sessions now |
+| `promptly validate` | | Measure the scorer against the benchmark |
 
 The launcher re-execs under the repo venv, so it works from any directory regardless of which Python is active.
 
@@ -124,18 +147,53 @@ Only needed to capture claude.ai — Claude Code is covered by the log parser. S
 
 ## How scoring works
 
-Every prompt is graded 0–10 across six weighted factors, built from 19 structural signals:
+Every prompt is graded 0–10 across seven weighted factors, built from 23 structural signals:
 
 | Factor | Weight | Measures |
 |---|---|---|
-| Clarity | 25% | One unambiguous action, active voice, no hedging |
-| Specificity | 20% | Names files, identifiers, expected output shape |
-| Context | 20% | Background, intent, relevant stack |
-| Constraints | 15% | What not to change, where to stop |
-| Scope | 10% | One task per request, sized to be reviewable |
-| Examples | 10% | Code, errors, or a concrete input/output case |
+| Clarity | 22% | One unambiguous action, active voice, no hedging |
+| Specificity | 18% | Names files, identifiers, expected output shape |
+| Context | 17% | Background, intent, relevant stack |
+| **Efficiency** | **15%** | **Tokens spent, and whether the reply size is bounded** |
+| Constraints | 13% | What not to change, where to stop |
+| Scope | 9% | One task per request, sized to be reviewable |
+| Examples | 6% | Code, errors, or a concrete input/output case |
 
 **The scorer is deterministic and runs offline.** No language model is involved in producing a score — that's the point. A rubric you own is defensible; a wrapper around someone else's judgement isn't.
+
+### Token efficiency
+
+Prompt quality and prompt *cost* are different axes, and the second one is where the money goes. `"do both"` scores 4.1/10 and is two words long — and it drew **57,303 output tokens**. Being terse is not the same as being efficient.
+
+So Prompt.ly measures both:
+
+**The `efficiency` factor** predicts cost from the text alone, which is what makes it usable *before* you send:
+
+| Signal | Evidence |
+|---|---|
+| `concise_prompt` (≤60 words) | **p = 0.010** — median 3.3k vs 14.1k output tokens |
+| `no_filler_phrases` | p = 0.094 — median 3.7k vs 13.9k |
+| `bounds_response_size` | underpowered (only 5 prompts in the corpus bound their reply) |
+| `no_redundant_restatement` | not separated on this corpus |
+
+Measured by Mann–Whitney U on 45 real turns. Only the first is significant at p < 0.05; the other two are kept because each directly causes tokens to be spent, but they are **not yet demonstrated**, and the 15% weight is set to reflect that rather than to overstate it. Retune with `PROMPTLY_EFFICIENCY_WEIGHT=0.25` — the other six factors rescale to keep the weights summing to 1.
+
+**Measured token economics** is the other half — what your prompting actually cost, from the transcript:
+
+```
+token cost
+      total tokens  151,473,132
+  context / output  150,968,544 · 504,588
+ median per prompt  9,893 out  (typical)
+  per file changed  6,819 out
+```
+
+Two things worth knowing about these numbers:
+
+- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude — this repo's real figure is 151M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
+- **Cost per file changed is the honest metric.** Raw totals punish a big task for being big. Normalising by work delivered is what makes a one-line fix and a refactor comparable.
+
+Neither number is causal. A prompt that costs 60k tokens may have been doing 60k tokens of legitimate work; these are observational figures on one corpus, and they are labelled that way in the code.
 
 ### Does it actually work?
 
@@ -143,12 +201,16 @@ Every prompt is graded 0–10 across six weighted factors, built from 19 structu
 
 | Metric | Result |
 |---|---|
-| Weak mean | 3.48 / 10 |
-| Strong mean | 6.02 / 10 |
+| Weak mean | 4.17 / 10 |
+| Strong mean | 6.45 / 10 |
 | **Pairwise accuracy** | **20 / 20** |
 | **AUC** | **0.981** |
 
-It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework.
+It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework. On this machine's 53 scored prompts that correlation is **r = 0.122**.
+
+That number is low, and worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and 53 prompts is a small sample. Adding the efficiency factor moved it from 0.083 to 0.122 on the same corpus — a real improvement, on a metric that still has a long way to go.
+
+Against token cost specifically, the efficiency factor correlates **r = −0.204** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
 
 ---
 
@@ -181,7 +243,7 @@ promptly share --anonymize  # ...with the folder name hidden
 
 <img src="docs/shareable-report.png" alt="Shareable report" width="480">
 
-The file carries aggregate scores, factor breakdowns, all 19 habit rates, activity counts and the benchmark result. It contains **no prompt text, no file paths, no session titles**. Redaction is a whitelist, so a field added to the internal report later cannot leak into a shared file by default.
+The file carries aggregate scores, factor breakdowns, all 23 habit rates, aggregate token cost, activity counts and the benchmark result. It contains **no prompt text, no file paths, no session titles**. Redaction is a whitelist, so a field added to the internal report later cannot leak into a shared file by default.
 
 ---
 
@@ -208,7 +270,7 @@ prompt.ly/
 │   ├── workspace.py      Detects the folder open in VS Code / Cursor
 │   ├── llm.py            The only language-model calls in the project
 │   ├── ingestion/        JSONL parser, classifier, attribution
-│   └── ml/               19 signals, rubric, MLP, trainer
+│   └── ml/               23 signals, rubric, MLP, trainer
 ├── frontend/             Next.js 14 + Tailwind dashboard
 ├── vscode-extension/     Sidebar, status bar, score-selection
 ├── mcp_server/           Claude desktop extension (5 tools)

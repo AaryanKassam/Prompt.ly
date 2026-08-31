@@ -37,6 +37,10 @@ ISSUES: dict[str, tuple[str, str]] = {
     "examples.has_code_block": ("No code or error pasted", "Paraphrased errors lose the detail that identifies the cause."),
     "examples.has_before_after": ("No before/after", "Current-vs-desired is the fastest way to convey a behaviour change."),
     "examples.has_inline_example": ("No example", "One concrete case removes more ambiguity than a paragraph of description."),
+    "efficiency.concise_prompt": ("Over ~60 words", "Long prompts draw long answers: the turns measured here cost a median 14k output tokens against 3.3k for short ones."),
+    "efficiency.no_filler_phrases": ("Conversational filler", "\"Can you\" and \"please\" frame the turn as a chat, and chats get chatty — and expensive — replies."),
+    "efficiency.bounds_response_size": ("Reply size unbounded", "Nothing caps the answer, so the model picks the length. Output is where nearly all the tokens go."),
+    "efficiency.no_redundant_restatement": ("Repeats itself", "The same instruction appears twice, paying tokens for it twice."),
 }
 
 _HEDGES = re.compile(
@@ -76,7 +80,7 @@ def _sentences(text: str) -> list[str]:
 def find_issues(text: str) -> list[dict]:
     """Every signal the prompt misses, worst-weighted factors first."""
     signals = extract_signals(text)
-    order = ["clarity", "specificity", "context", "constraints", "scope", "examples"]
+    order = ["clarity", "specificity", "context", "constraints", "scope", "examples", "efficiency"]
     issues = []
     for factor in order:
         for name, hit in signals.get(factor, {}).items():

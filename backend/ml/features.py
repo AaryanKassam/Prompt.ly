@@ -54,6 +54,27 @@ _TECH_STACK = {
     "api", "endpoint", "component", "hook", "class", "function", "module",
 }
 
+# Social scaffolding: costs tokens on the way in and invites a conversational
+# (long) reply on the way out, while adding no constraint. Distinct from
+# _HEDGE_WORDS, which are about commitment rather than cost.
+_FILLER_PHRASES = {
+    "can you", "could you", "would you", "will you", "please ", "i want you to",
+    "i would like", "i'd like", "if possible", "if you could", "let me know",
+    "thanks", "thank you", "i was wondering", "would it be possible",
+    "just wondering", "for me", "i need you to", "help me", "is there a way",
+    "do you think you can", "i'm trying to", "im trying to",
+}
+
+# Phrases that cap the size of the reply. Output dominates the token bill —
+# median output on real turns is ~6k tokens against a near-zero uncached input —
+# so bounding the response is the single biggest lever a prompt has.
+_RESPONSE_BOUND_PHRASES = {
+    "briefly", "in one", "in two", "in three", "one sentence", "a few bullets",
+    "bullet", "just the", "only the", "no explanation", "don't explain",
+    "do not explain", "without explaining", "concise", "at most", "no more than",
+    "keep it", "tl;dr", "diff only", "code only", "one paragraph", "limit the",
+}
+
 _OUTPUT_FORMAT_PHRASES = {
     "return a", "return the", "output", "format", "json", "dict with", "list of",
     "as a table", "csv", "with keys", "schema", "shape", "signature",
@@ -202,6 +223,48 @@ def has_inline_example(text: str) -> bool:
     return "e.g." in low or "for example" in low or "like this" in low or "such as" in low
 
 
+# --- efficiency (token cost) ----------------------------------------------
+#
+# These score how many tokens a prompt is likely to *spend*, which is a
+# different axis from how good it is. A one-word prompt is cheap to send and
+# expensive to answer, because the model explores instead of acting.
+#
+# Evidence, measured on this machine's own corpus (n=45 scored turns with token
+# counts) by Mann-Whitney U against observed output tokens:
+#   concise_prompt            p=0.010   median 3.3k vs 14.1k output tokens
+#   no_filler_phrases         p=0.094   median 3.7k vs 13.9k
+#   bounds_response_size      p=0.563   underpowered (only 5 prompts bound it)
+#   no_redundant_restatement  p=0.894   not separated on this corpus
+# The last two are kept on principle — both directly cause tokens to be spent —
+# but they are not yet demonstrated. See docs in README before reweighting.
+
+_CONCISE_WORD_LIMIT = 60  # calibrated: the strongest split in the corpus above
+
+
+def concise_prompt(text: str) -> bool:
+    """Short enough that the reply stays bounded. Strictest of the length signals."""
+    return 0 < len(_words(text)) <= _CONCISE_WORD_LIMIT
+
+
+def no_filler_phrases(text: str) -> bool:
+    return not _contains_any(text.lower(), _FILLER_PHRASES)
+
+
+def bounds_response_size(text: str) -> bool:
+    return _contains_any(text.lower(), _RESPONSE_BOUND_PHRASES)
+
+
+def no_redundant_restatement(text: str) -> bool:
+    """False when two sentences restate each other, paying twice for one idea."""
+    sets = [set(_words(s)) for s in _sentences(text)]
+    sets = [w for w in sets if len(w) >= 4]
+    for i, a in enumerate(sets):
+        for b in sets[i + 1:]:
+            if len(a & b) / min(len(a), len(b)) >= 0.7:
+                return False
+    return True
+
+
 # --- registry -------------------------------------------------------------
 
 # factor -> {signal_name: extractor}. rubric.py applies weights over these.
@@ -236,6 +299,12 @@ SIGNALS: dict[str, dict] = {
         "has_code_block": has_code_block,
         "has_before_after": has_before_after,
         "has_inline_example": has_inline_example,
+    },
+    "efficiency": {
+        "concise_prompt": concise_prompt,
+        "no_filler_phrases": no_filler_phrases,
+        "bounds_response_size": bounds_response_size,
+        "no_redundant_restatement": no_redundant_restatement,
     },
 }
 

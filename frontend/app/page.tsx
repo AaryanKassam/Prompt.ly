@@ -6,6 +6,7 @@ import { useQuery } from "@/lib/useQuery";
 import ScoreBadge from "@/components/ScoreBadge";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import { StatTile, TrendPill } from "@/components/StatTile";
+import TokenCost from "@/components/TokenCost";
 import { CardListSkeleton, EmptyState, ErrorState, Skeleton, StatRowSkeleton } from "@/components/states";
 import { ChevronRightIcon, FolderIcon } from "@/components/icons";
 
@@ -98,6 +99,9 @@ export default function OverviewPage() {
           />
         </div>
       ) : null}
+
+      {/* Measured token spend */}
+      {r && t && t.prompts > 0 && <TokenCost econ={r.token_economics} />}
 
       {/* Factors + top recommendation */}
       {r && t && t.prompts > 0 && (

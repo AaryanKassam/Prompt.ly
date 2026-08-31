@@ -38,6 +38,7 @@ def _score_block(prompt: Prompt) -> Optional[dict]:
             "constraints": s.constraints,
             "scope": s.scope,
             "examples": s.examples,
+            "efficiency": s.efficiency,
         },
     }
 

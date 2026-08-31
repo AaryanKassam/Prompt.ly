@@ -10,15 +10,53 @@ from dataclasses import dataclass, field
 
 from .features import extract_signals
 
-# Factor weights (must sum to 1.0). Sourced from the handoff rubric.
+# Factor weights (must sum to 1.0). The first six come from the handoff rubric;
+# `efficiency` was added to score what a prompt *costs*, not just how good it is,
+# and every other weight was scaled down proportionally to make room for it.
+#
+# 15% is a deliberate compromise. Only one of efficiency's four signals is
+# statistically separated on the corpus measured so far (see features.py), so
+# weighting it above the validated quality factors would overstate the evidence;
+# weighting it lower would not change any ranking. Override with the
+# PROMPTLY_EFFICIENCY_WEIGHT env var to explore a different balance.
+# Declared in descending weight order: several consumers render factors by
+# iterating this dict, and the heaviest factor should be read first.
 WEIGHTS: dict[str, float] = {
-    "clarity": 0.25,
-    "specificity": 0.20,
-    "context": 0.20,
-    "constraints": 0.15,
-    "scope": 0.10,
-    "examples": 0.10,
+    "clarity": 0.22,
+    "specificity": 0.18,
+    "context": 0.17,
+    "efficiency": 0.15,
+    "constraints": 0.13,
+    "scope": 0.09,
+    "examples": 0.06,
 }
+
+
+def _apply_weight_override() -> None:
+    """Let PROMPTLY_EFFICIENCY_WEIGHT retune efficiency vs. the quality factors.
+
+    The other six keep their relative proportions and absorb the difference, so
+    the weights still sum to 1.0 whatever value is set.
+    """
+    import os
+
+    raw = os.getenv("PROMPTLY_EFFICIENCY_WEIGHT")
+    if raw is None:
+        return
+    try:
+        target = float(raw)
+    except ValueError:
+        return
+    if not 0.0 <= target < 1.0:
+        return
+    others = {k: v for k, v in WEIGHTS.items() if k != "efficiency"}
+    scale = (1.0 - target) / sum(others.values())
+    for key, value in others.items():
+        WEIGHTS[key] = round(value * scale, 6)
+    WEIGHTS["efficiency"] = target
+
+
+_apply_weight_override()
 
 MODEL_PHASE = 1  # 1 = rubric, 2 = MLP, 3 = fine-tuned
 

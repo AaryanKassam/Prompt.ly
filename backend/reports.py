@@ -14,6 +14,7 @@ name a file or line number" is.
 """
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -46,7 +47,19 @@ RECOMMENDATIONS: dict[str, str] = {
     "examples.has_code_block": "Paste the actual code, error, or stack trace in a fenced block rather than paraphrasing it.",
     "examples.has_before_after": "Show current vs. desired: \"currently returns None, should return an empty list\".",
     "examples.has_inline_example": "Give one concrete example of the input/output you have in mind (\"e.g. `parse('a,b')` -> `['a','b']`\").",
+    "efficiency.concise_prompt": "Keep prompts under ~60 words. On the turns measured here, longer ones drew a median 14k output tokens against 3.3k for short ones.",
+    "efficiency.no_filler_phrases": "Drop \"can you\", \"please\", \"I was wondering\". Politeness reads as conversation and draws a conversational — and much longer — reply.",
+    "efficiency.bounds_response_size": "Cap the reply: \"just the diff\", \"in three bullets\", \"no explanation\". Output is where the tokens actually go.",
+    "efficiency.no_redundant_restatement": "Say each thing once. Restating the ask in different words pays for it twice and adds no information.",
 }
+
+# Output tokens per prompt, from the corpus these thresholds were calibrated on.
+# Bands describe spend, not quality: a heavy prompt may be doing heavy work.
+_COST_BANDS = ((3000, "lean"), (10000, "typical"))
+
+# Bumped when build_report's payload shape changes, so stored caches rebuild.
+# 2: added token_economics.  3: factors reordered by descending weight.
+SCHEMA_VERSION = 3
 
 _ALL_SIGNAL_KEYS = [f"{factor}.{name}" for factor, sigs in SIGNALS.items() for name in sigs]
 
@@ -161,6 +174,115 @@ def _preview(text: str | None, limit: int = 160) -> str:
     return t[:limit] + ("…" if len(t) > limit else "")
 
 
+# Median output tokens observed for prompts that pass / fail each efficiency
+# signal, measured on the corpus described in ml/features.py. Used to project a
+# reply size before the prompt is sent — see estimate_prompt_cost.
+_OBSERVED_OUTPUT = {"concise_and_clean": 3300, "mixed": 6000, "verbose": 14000}
+
+
+def estimate_prompt_cost(text: str) -> dict:
+    """Project what a draft prompt will cost, before it is sent.
+
+    The input side is a character estimate; the output side is the median
+    observed for prompts with the same efficiency signals, which matters far
+    more — generated tokens outnumber uncached input by orders of magnitude.
+
+    This is a projection from one corpus, not a guarantee: a short prompt that
+    launches a large refactor will blow straight through it.
+    """
+    signals = extract_signals(text).get("efficiency", {})
+    concise = signals.get("concise_prompt", False)
+    clean_of_filler = signals.get("no_filler_phrases", False)
+    bounded = signals.get("bounds_response_size", False)
+
+    if concise and clean_of_filler:
+        band = "concise_and_clean"
+    elif not concise:
+        band = "verbose"
+    else:
+        band = "mixed"
+    projected = _OBSERVED_OUTPUT[band]
+    if bounded:
+        # Prompts that cap the reply came in below their band's median.
+        projected = round(projected * 0.6)
+
+    return {
+        # ~4 characters per token; close enough to size a draft.
+        "prompt_tokens": max(1, round(len(text) / 4)),
+        "projected_output_tokens": projected,
+        "band": band,
+        "bounded": bounded,
+        "signals": signals,
+    }
+
+
+def _cost_band(median_output: float | None) -> str:
+    if median_output is None:
+        return "unknown"
+    for ceiling, label in _COST_BANDS:
+        if median_output < ceiling:
+            return label
+    return "heavy"
+
+
+def _token_economics(prompts: list[Prompt]) -> dict:
+    """What this project's prompting actually cost, in tokens.
+
+    Separate from the efficiency *factor*, which predicts cost from the text
+    alone. This measures what was really spent, so the two can be compared.
+
+    Context is input + both cache buckets: Claude Code caches so aggressively
+    that raw input_tokens understates a turn by an order of magnitude, and a
+    report built on input_tokens alone would show near-zero context cost.
+    """
+    outputs = [p.output_tokens for p in prompts if p.output_tokens]
+    context = sum(
+        (p.input_tokens or 0) + (p.cache_read_tokens or 0) + (p.cache_creation_tokens or 0)
+        for p in prompts
+    )
+    total_output = sum(outputs)
+
+    work = 0
+    for p in prompts:
+        d = p.file_diffs or {}
+        work += len(d.get("created") or []) + len(d.get("edited") or []) + len(d.get("deleted") or [])
+    tool_calls = sum(len(p.tool_calls or []) for p in prompts)
+
+    median_output = statistics.median(outputs) if outputs else None
+    priciest = sorted(
+        (p for p in prompts if p.output_tokens),
+        key=lambda p: p.output_tokens,
+        reverse=True,
+    )[:3]
+
+    return {
+        "context_tokens": context,
+        "output_tokens": total_output,
+        "total_tokens": context + total_output,
+        "prompts_with_tokens": len(outputs),
+        "median_output_per_prompt": round(median_output) if median_output is not None else None,
+        "mean_output_per_prompt": round(total_output / len(outputs)) if outputs else None,
+        # Cost per unit of work delivered. Raw token counts punish big tasks for
+        # being big; normalising by files changed and tool calls is what makes
+        # the number comparable between a one-line fix and a refactor.
+        "output_per_file_changed": round(total_output / work) if work else None,
+        "output_per_tool_call": round(total_output / tool_calls) if tool_calls else None,
+        "files_changed": work,
+        "cost_band": _cost_band(median_output),
+        "most_expensive": [
+            {
+                "id": p.id,
+                "session_id": p.session_id,
+                "turn_index": p.turn_index,
+                "output_tokens": p.output_tokens,
+                "score": round(p.score.overall, 2) if p.score and p.score.overall is not None else None,
+                "preview": _preview(p.text),
+            }
+            for p in priciest
+        ],
+    }
+
+
 def build_report(db: DbSession, project_path: str) -> dict:
     """Assemble the full report payload for one project folder."""
     data = collect(db, project_path)
@@ -234,6 +356,12 @@ def build_report(db: DbSession, project_path: str) -> dict:
             "prompts_with_text": len(texts),
             "input_tokens": sum(p.input_tokens or 0 for p in data.prompts),
             "output_tokens": sum(p.output_tokens or 0 for p in data.prompts),
+            "context_tokens": sum(
+                (p.input_tokens or 0)
+                + (p.cache_read_tokens or 0)
+                + (p.cache_creation_tokens or 0)
+                for p in data.prompts
+            ),
             "tool_calls": sum(len(p.tool_calls or []) for p in data.prompts),
             "files_touched": len(files_touched),
             "files_created": created,
@@ -242,6 +370,7 @@ def build_report(db: DbSession, project_path: str) -> dict:
         },
         "overall": overall,
         "grade": grade(overall),
+        "token_economics": _token_economics(data.prompts),
         "factors": factors,
         "weakest_factor": min(
             ((f, v) for f, v in factors.items() if v is not None),
@@ -298,6 +427,10 @@ SIGNAL_LABELS: dict[str, str] = {
     "has_code_block": "includes code",
     "has_before_after": "shows before/after",
     "has_inline_example": "gives an example",
+    "concise_prompt": "60 words or fewer",
+    "no_filler_phrases": "no conversational filler",
+    "bounds_response_size": "caps the reply size",
+    "no_redundant_restatement": "says each thing once",
 }
 
 
@@ -359,13 +492,17 @@ def fingerprint(db: DbSession, project_path: str) -> str:
     Prompts are only ever appended by the importer and rescoring bumps a
     score's `scored_at`, so row count + newest prompt id + latest scoring time
     is enough to tell a stale cache entry from a live one.
+
+    SCHEMA_VERSION covers the case data alone cannot: when the report gains a
+    section, every stored payload is stale even though nothing about the
+    prompts changed. Bump it whenever build_report's output shape changes.
     """
     data = collect(db, project_path)
     ids = [p.id for p in data.prompts]
     if not ids:
-        return "empty"
+        return f"empty:{SCHEMA_VERSION}"
     latest = db.scalar(select(func.max(Score.scored_at)).where(Score.prompt_id.in_(ids)))
-    return f"{len(ids)}:{max(ids)}:{latest.isoformat() if latest else '-'}"
+    return f"v{SCHEMA_VERSION}:{len(ids)}:{max(ids)}:{latest.isoformat() if latest else '-'}"
 
 
 def cached_report(
@@ -404,6 +541,7 @@ def import_sessions(db: DbSession) -> dict:
     return {
         "sessions_created": result.sessions_created,
         "prompts_created": result.prompts_created,
+        "prompts_updated": result.prompts_updated,
     }
 
 
@@ -455,6 +593,32 @@ def render_markdown(report: dict) -> str:
         for p in report["worst_prompts"]:
             lines.append(f"- **{p['score']}/10** — \"{p['preview']}\"")
 
+    econ = report.get("token_economics") or {}
+    if econ.get("prompts_with_tokens"):
+        lines += [
+            "",
+            "## Token cost",
+            "",
+            f"- **{econ['total_tokens']:,} tokens total** — "
+            f"{econ['context_tokens']:,} context (cache included), "
+            f"{econ['output_tokens']:,} generated",
+            f"- Median **{econ['median_output_per_prompt']:,} output tokens per prompt** "
+            f"({econ['cost_band']} for this corpus)",
+        ]
+        if econ.get("output_per_file_changed"):
+            lines.append(
+                f"- **{econ['output_per_file_changed']:,} output tokens per file changed** — "
+                "cost per unit of work, which is what makes a small fix and a "
+                "refactor comparable"
+            )
+        if econ.get("most_expensive"):
+            lines += ["", "Most expensive turns:", ""]
+            for p in econ["most_expensive"]:
+                score = f"{p['score']}/10" if p["score"] is not None else "unscored"
+                lines.append(
+                    f"- **{p['output_tokens']:,} tokens** ({score}) — \"{p['preview']}\""
+                )
+
     lines += [
         "",
         "## Activity",
@@ -462,6 +626,6 @@ def render_markdown(report: dict) -> str:
         f"- {t['prompts']} prompts, {t['tool_calls']} tool calls",
         f"- {t['files_touched']} distinct files touched "
         f"({t['files_created']} created, {t['files_edited']} edited, {t['files_deleted']} deleted)",
-        f"- {t['input_tokens']:,} input / {t['output_tokens']:,} output tokens",
+        f"- {t['input_tokens']:,} uncached input / {t['output_tokens']:,} output tokens",
     ]
     return "\n".join(lines)

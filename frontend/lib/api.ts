@@ -116,10 +116,33 @@ export interface ReportPromptRef {
   preview: string;
 }
 
+export interface TokenEconomics {
+  context_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  prompts_with_tokens: number;
+  median_output_per_prompt: number | null;
+  mean_output_per_prompt: number | null;
+  /** Cost per unit of work delivered — comparable across task sizes. */
+  output_per_file_changed: number | null;
+  output_per_tool_call: number | null;
+  files_changed: number;
+  cost_band: "lean" | "typical" | "heavy" | "unknown";
+  most_expensive: {
+    id: string;
+    session_id: string;
+    turn_index: number;
+    output_tokens: number;
+    score: number | null;
+    preview: string;
+  }[];
+}
+
 export interface ProjectReport {
   project_path: string;
   generated_at: string;
   cached: boolean;
+  token_economics: TokenEconomics;
   totals: {
     sessions: number;
     prompts: number;
@@ -127,6 +150,7 @@ export interface ProjectReport {
     prompts_with_text: number;
     input_tokens: number;
     output_tokens: number;
+    context_tokens: number;
     tool_calls: number;
     files_touched: number;
     files_created: number;

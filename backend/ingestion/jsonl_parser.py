@@ -42,8 +42,19 @@ class ParsedPrompt:
     model: Optional[str] = None
     input_tokens: int = 0
     output_tokens: int = 0
+    # Claude Code caches aggressively, so `input_tokens` alone understates a
+    # turn by an order of magnitude: a turn billed 6k input can carry 15k of
+    # cache reads and 11k of cache writes. Token-efficiency reporting needs the
+    # whole input side, so both cache buckets are captured too.
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
     timestamp: Optional[datetime] = None
     tool_calls: list = field(default_factory=list)  # [{name, input}]
+
+    @property
+    def context_tokens(self) -> int:
+        """Every input-side token this turn was billed for, cache included."""
+        return self.input_tokens + self.cache_read_tokens + self.cache_creation_tokens
 
     def file_diffs(self) -> dict:
         """Reconstruct which files were created/edited from this turn's tool calls."""
@@ -155,6 +166,10 @@ def parse_file(path: Path) -> Optional[ParsedSession]:
                 current.output_tokens += int(usage.get("output_tokens") or 0)
                 # input_tokens reflects the prompt's context size; keep the largest seen.
                 current.input_tokens = max(current.input_tokens, int(usage.get("input_tokens") or 0))
+                # Cache buckets are summed, not maxed: one turn can make several
+                # API calls and each is billed for its own cache traffic.
+                current.cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
+                current.cache_creation_tokens += int(usage.get("cache_creation_input_tokens") or 0)
                 for block in msg.get("content") or []:
                     if not isinstance(block, dict):
                         continue

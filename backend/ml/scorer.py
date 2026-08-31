@@ -44,6 +44,13 @@ def _load_active_model():
         return None
     if meta.get("examples", 0) < BLEND_MIN_EXAMPLES:
         return None
+    # Adding a rubric signal changes the structural half of the feature vector,
+    # so a model trained before that change expects the wrong input width.
+    # Retire it silently rather than scoring against a stale layout.
+    from .model import INPUT_DIM
+
+    if meta.get("input_dim") != INPUT_DIM:
+        return None
     try:
         import torch
 
