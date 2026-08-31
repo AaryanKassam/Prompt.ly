@@ -12,7 +12,7 @@ Prompt.ly reads the Claude Code session logs already on your machine, grades eve
 
 Everyone using an AI coding assistant is writing dozens of prompts a day, and nobody gets feedback on any of them. A vague prompt costs a search, a wrong guess, and a round trip — but that cost is invisible, so the habit never changes.
 
-Prompt.ly makes it visible — in both directions. It found that 97% of my prompts never paste the actual error and 90% never name a file, and that a single two-word prompt (`"do both"`) cost 57,303 output tokens.
+Prompt.ly makes it visible — in both directions. It found that 97% of my prompts never paste the actual error and 91% never name a file, and that a single two-word prompt (`"do both"`) cost 57,303 output tokens.
 
 ---
 
@@ -84,7 +84,7 @@ promptly sync                                          # import existing history
 
 `install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run. Run `promptly` on its own to see every command.
 
-> **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) and picks up the symlink above. Run the same `promptly` commands there as in Terminal.app — one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
+> **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) that `./setup` configured. Run the same `promptly` commands there as in Terminal.app — one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
 
 **Score a prompt before you send it** — the thing only the terminal can do:
 
@@ -116,6 +116,10 @@ Then the rest:
 | `promptly doctor` | `check` | Check the setup and print the fix for anything broken |
 | `promptly sync` | | Import new sessions now |
 | `promptly validate` | | Measure the scorer against the benchmark |
+| `promptly workspaces` | | Folders currently open in VS Code / Cursor |
+| `promptly reclassify` | | Re-label and rescore after an upgrade |
+
+`promptly help` prints all of these grouped by when you'd reach for them, and `--json` works on most of them for scripting.
 
 The launcher re-execs under the repo venv, so it works from any directory regardless of which Python is active.
 
@@ -193,15 +197,15 @@ Measured by Mann–Whitney U on 45 real turns. Only the first is significant at 
 
 ```
 token cost
-      total tokens  151,473,132
-  context / output  150,968,544 · 504,588
+      total tokens  156,630,884
+  context / output  156,108,884 · 522,000
  median per prompt  9,893 out  (typical)
-  per file changed  6,819 out
+  per file changed  6,960 out
 ```
 
 Two things worth knowing about these numbers:
 
-- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude — this repo's real figure is 151M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
+- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude — this repo's real figure is ~156M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
 - **Cost per file changed is the honest metric.** Raw totals punish a big task for being big. Normalising by work delivered is what makes a one-line fix and a refactor comparable.
 
 Neither number is causal. A prompt that costs 60k tokens may have been doing 60k tokens of legitimate work; these are observational figures on one corpus, and they are labelled that way in the code.
@@ -217,11 +221,15 @@ Neither number is causal. A prompt that costs 60k tokens may have been doing 60k
 | **Pairwise accuracy** | **20 / 20** |
 | **AUC** | **0.981** |
 
-It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework. On this machine's 53 scored prompts that correlation is **r = 0.122**.
+Those four figures come from a fixed fixture, so they are reproducible: `promptly validate` gives the same answer on your machine as on mine.
 
-That number is low, and worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and 53 prompts is a small sample. Adding the efficiency factor moved it from 0.083 to 0.122 on the same corpus — a real improvement, on a metric that still has a long way to go.
+It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework. On this machine's 55 scored prompts that correlation is **r = 0.165**.
 
-Against token cost specifically, the efficiency factor correlates **r = −0.204** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
+That number is low, and worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and 55 prompts is a small sample. Adding the efficiency factor moved it from **0.103 to 0.165** on the same corpus — a real improvement, on a metric that still has a long way to go.
+
+Against token cost specifically, the efficiency factor correlates **r = −0.211** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
+
+> Every figure in this section that comes from *real prompts* — the correlations, the token totals above — is a snapshot of one machine's corpus on 2026-08-31 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
 
 ---
 
@@ -273,9 +281,11 @@ Everything runs on your machine. There is no server, no account, and no telemetr
 
 ```
 prompt.ly/
+├── setup                 One-command installer (safe to re-run)
 ├── backend/              FastAPI + SQLAlchemy
 │   ├── cli.py            The `promptly` terminal UI
-│   ├── reports.py        Per-project report engine + cache
+│   ├── reports.py        Per-project report engine, cache, token economics
+│   ├── improve.py        Offline rewrite of a weak prompt
 │   ├── share.py          Redacted shareable report
 │   ├── validation.py     Benchmark + outcome correlation
 │   ├── workspace.py      Detects the folder open in VS Code / Cursor
@@ -291,7 +301,7 @@ prompt.ly/
 
 Two details worth knowing:
 
-**Transcript noise is excluded.** 37% of recorded "user turns" were never typed by a person — skill files injected into context, slash-command echoes, IDE events. They're long and well-structured, so they scored *highly* and crowded out real prompts. `ingestion/classify.py` filters them.
+**Transcript noise is excluded.** Half of the recorded "user turns" were never typed by a person. In this repo's 108 rows: 33 system notices, 10 skill injections, 10 slash-command echoes and 1 empty turn, against 54 real prompts. They're long and well-structured, so they scored *highly* and crowded out genuine prompts in the rankings. `ingestion/classify.py` filters them.
 
 **Prompts are attributed by the files they touched**, not the directory Claude Code launched in — otherwise work on one repo counts towards another.
 
@@ -300,10 +310,11 @@ Two details worth knowing:
 ## Troubleshooting
 
 ```bash
-promptly doctor
+promptly doctor    # what's wired up, and the exact fix for anything that isn't
+./setup            # re-run to repair a broken install; every step is idempotent
 ```
 
-Checks logs, database, `.env`, API key, scoring model, auto-sync hook, and both extensions — and prints the exact command to fix anything broken.
+`doctor` checks logs, database, `.env`, API key, scoring model, auto-sync hook and both extensions. `./setup` rebuilds whatever is missing without touching what already works.
 
 ---
 
