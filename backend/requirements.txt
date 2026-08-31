@@ -1,20 +1,17 @@
-# Web framework (added in Phase 1 step 5)
+# Core — everything except the optional extras below runs on these five.
+# Verified in a clean venv: backend, CLI, reports, share and validate all import.
 fastapi
 uvicorn[standard]
-
-# Database
 SQLAlchemy>=2.0
-# Postgres driver (used when DATABASE_URL points at postgres; SQLite needs nothing)
-psycopg2-binary
-
-# Config
 python-dotenv
+rich
 
-# --- Optional ML deps (Phase 5 MLP scorer) ---
-# The backend runs without these; they're only needed to train/run the MLP.
-# Install with: pip install sentence-transformers torch numpy
-# sentence-transformers
-# torch
-# numpy
-# faiss-cpu   # Phase 6 vector search
-# alembic     # Phase 3+ Postgres migrations
+# --- Optional extras, each needed for exactly one feature ---
+# Prompt rewrites and the generated playbook (the only LLM usage):
+#   pip install anthropic
+# Claude desktop app extension (MCP server):
+#   pip install "mcp[cli]"
+# Training the MLP scorer:
+#   pip install torch sentence-transformers numpy
+# Postgres instead of SQLite (set DATABASE_URL):
+#   pip install psycopg2-binary

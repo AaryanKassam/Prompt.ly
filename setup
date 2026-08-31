@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+#
+# One-command setup for Prompt.ly.
+#
+#   ./setup              install everything
+#   ./setup --no-path    don't touch the shell rc file
+#   ./setup --no-hook    skip the auto-import hook
+#   ./setup --no-vscode  skip the VS Code extension
+#
+# Safe to re-run: every step checks before it acts, so this doubles as a repair
+# command when something has drifted.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="$REPO/backend/venv"
+BIN_DIR="$HOME/.local/bin"
+
+DO_PATH=1 DO_HOOK=1 DO_VSCODE=1
+for arg in "$@"; do
+  case "$arg" in
+    --no-path)   DO_PATH=0 ;;
+    --no-hook)   DO_HOOK=0 ;;
+    --no-vscode) DO_VSCODE=0 ;;
+    -h|--help)   sed -n '3,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "setup: unknown option '$arg' (try --help)" >&2; exit 2 ;;
+  esac
+done
+
+if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; D=$'\033[2m'; R=$'\033[0m'
+else B='' G='' Y='' D='' R=''; fi
+ok()   { printf '%s✓%s %s\n' "$G" "$R" "$1"; }
+skip() { printf '%s·%s %s%s%s\n' "$D" "$R" "$D" "$1" "$R"; }
+warn() { printf '%s!%s %s\n' "$Y" "$R" "$1"; }
+die()  { printf 'setup: %s\n' "$1" >&2; exit 1; }
+
+printf '\n%sPrompt.ly%s\n\n' "$B" "$R"
+
+# --- 1. interpreter -------------------------------------------------------
+command -v python3 >/dev/null || die "python3 not found. Install Python 3.10+ and re-run."
+python3 - <<'PY' || die "Python 3.10+ required. Found $(python3 -V 2>&1)."
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+ok "Python $(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+
+# --- 2. virtualenv --------------------------------------------------------
+if [ -x "$VENV/bin/python" ]; then
+  skip "virtualenv already at backend/venv"
+else
+  python3 -m venv "$VENV" || die "could not create a virtualenv at $VENV"
+  ok "created backend/venv"
+fi
+
+# --- 3. dependencies ------------------------------------------------------
+# Checked before installing so a re-run of ./setup costs a second, not a
+# network round trip for every package.
+if "$VENV/bin/python" -c 'import fastapi, uvicorn, sqlalchemy, dotenv, rich' 2>/dev/null; then
+  skip "dependencies already installed"
+else
+  printf '  installing dependencies…\n'
+  "$VENV/bin/pip" install --quiet --upgrade pip
+  "$VENV/bin/pip" install --quiet -r "$REPO/backend/requirements.txt" \
+    || die "dependency install failed — re-run '$VENV/bin/pip install -r backend/requirements.txt' to see why"
+  ok "installed fastapi, uvicorn, sqlalchemy, python-dotenv, rich"
+fi
+
+# --- 4. put `promptly` on PATH -------------------------------------------
+mkdir -p "$BIN_DIR"
+LINK="$BIN_DIR/promptly"
+if [ -L "$LINK" ] && [ "$(readlink "$LINK")" = "$REPO/scripts/promptly" ]; then
+  skip "promptly already linked into ~/.local/bin"
+elif [ -e "$LINK" ] && [ ! -L "$LINK" ]; then
+  warn "$LINK exists and is not a symlink — leaving it alone"
+else
+  ln -sf "$REPO/scripts/promptly" "$LINK"
+  ok "linked promptly -> ~/.local/bin"
+fi
+
+# `command -v` reflects this script's PATH, which is not necessarily the one an
+# interactive shell gets, so test the string instead.
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ON_PATH=1 ;;
+  *) ON_PATH=0 ;;
+esac
+
+if [ "$ON_PATH" = 0 ]; then
+  case "$(basename "${SHELL:-/bin/bash}")" in
+    zsh)  RC="$HOME/.zshrc" ;;
+    bash) RC="$HOME/.bashrc" ;;
+    *)    RC="" ;;
+  esac
+  LINE='export PATH="$HOME/.local/bin:$PATH"'
+  if [ "$DO_PATH" = 1 ] && [ -n "$RC" ]; then
+    if [ -f "$RC" ] && grep -qF '.local/bin' "$RC"; then
+      skip "~/.local/bin already referenced in $(basename "$RC")"
+    else
+      printf '\n# added by Prompt.ly setup\n%s\n' "$LINE" >> "$RC"
+      ok "added ~/.local/bin to PATH in $(basename "$RC")"
+      warn "open a new terminal (or run: source $RC) before using promptly"
+    fi
+  else
+    warn "~/.local/bin is not on your PATH. Add this to your shell rc file:"
+    printf '    %s\n' "$LINE"
+  fi
+fi
+
+PROMPTLY="$REPO/scripts/promptly"
+
+# --- 5. import existing history ------------------------------------------
+# Report what sync actually found. On a machine with no Claude Code history
+# there is genuinely nothing to import, and saying otherwise would be a lie the
+# user only discovers when the first report comes back empty.
+printf '  importing your Claude Code history…\n'
+if "$PROMPTLY" sync >/dev/null 2>&1; then
+  # Report the total in the database, not the number newly added. On a re-run
+  # the delta is zero even though there is plenty of history, and "nothing
+  # found" would be flatly wrong.
+  TOTALS="$("$PROMPTLY" projects --json 2>/dev/null || echo '[]')"
+  read -r N_PROMPTS N_PROJECTS <<EOF
+$(printf '%s' "$TOTALS" | "$VENV/bin/python" -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin)
+except Exception:
+    rows = []
+print(sum(r.get("prompt_count") or 0 for r in rows), len(rows))
+' 2>/dev/null || echo "0 0")
+EOF
+  if [ "${N_PROMPTS:-0}" -gt 0 ] 2>/dev/null; then
+    ok "$N_PROMPTS prompts across $N_PROJECTS project(s) scored and ready"
+  else
+    skip "no Claude Code history found yet — sessions import themselves as you work"
+  fi
+else
+  warn "import failed; run 'promptly sync' to see why"
+fi
+
+# --- 6. auto-import hook --------------------------------------------------
+if [ "$DO_HOOK" = 1 ]; then
+  "$PROMPTLY" install-hook >/dev/null 2>&1 \
+    && ok "auto-import hook installed — sessions import themselves" \
+    || warn "could not install the hook; run 'promptly install-hook' to see why"
+else
+  skip "skipped the auto-import hook"
+fi
+
+# --- 7. VS Code extension -------------------------------------------------
+if [ "$DO_VSCODE" = 1 ]; then
+  ANY_NEW=0 ANY_EDITOR=0
+  # Every VS Code-family editor found gets the extension, each named in the
+  # output — installing into an editor the user forgot they had should be
+  # visible rather than silent.
+  for entry in "VS Code:$HOME/.vscode" "VS Code Insiders:$HOME/.vscode-insiders" "Cursor:$HOME/.cursor" "VSCodium:$HOME/.vscode-oss"; do
+    label="${entry%%:*}"; ext_dir="${entry#*:}/extensions"
+    [ -d "$ext_dir" ] || continue
+    ANY_EDITOR=1
+    target="$ext_dir/promptly-1.0.0"
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "$REPO/vscode-extension" ]; then
+      skip "extension already installed in $label"
+    else
+      ln -sfn "$REPO/vscode-extension" "$target" \
+        && { ok "extension installed in $label — reload the window to see it"; ANY_NEW=1; } \
+        || warn "could not link the extension into $label"
+    fi
+  done
+  [ "$ANY_EDITOR" = 0 ] && skip "no VS Code-family editor found"
+  : "$ANY_NEW"
+else
+  skip "skipped the VS Code extension"
+fi
+
+# --- done -----------------------------------------------------------------
+printf '\n%sReady.%s\n\n' "$B" "$R"
+printf '  %spromptly score "your draft"%s   rate it, and see its token cost, before sending\n' "$B" "$R"
+printf '  %spromptly report%s               how you are prompting in this folder\n' "$B" "$R"
+printf '  %s./scripts/dev%s                 dashboard at http://localhost:3000\n\n' "$B" "$R"
+if [ "$ON_PATH" = 0 ]; then
+  printf '  %sOpen a new terminal first%s — PATH was just changed.\n\n' "$Y" "$R"
+fi
+printf '  %spromptly doctor%s checks every part of this setup.\n\n' "$D" "$R"

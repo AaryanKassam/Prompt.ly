@@ -31,19 +31,23 @@ All four read the same database and call the same scoring engine, so they can ne
 
 ## Install
 
-Requires Python 3.10+ and Claude Code.
+Requires Python 3.10+ and Claude Code. One line:
 
 ```bash
-git clone https://github.com/AaryanKassam/Prompt.ly.git
-cd Prompt.ly
-
-python3 -m venv backend/venv
-backend/venv/bin/pip install fastapi uvicorn sqlalchemy python-dotenv rich
-
-backend/venv/bin/python scripts/import_jsonl.py    # import your history
+git clone https://github.com/AaryanKassam/Prompt.ly.git && cd Prompt.ly && ./setup
 ```
 
-That's the whole setup. Your existing Claude Code sessions are now scored.
+`./setup` creates the virtualenv, installs the five dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds — naming each one as it goes.
+
+It is **safe to re-run**: every step checks before it acts, so it doubles as a repair command when something drifts.
+
+```bash
+./setup --no-path      # don't touch your shell rc file
+./setup --no-hook      # skip the auto-import hook
+./setup --no-vscode    # skip the editor extension
+```
+
+The only thing it changes outside the repo is one `export PATH` line in your `.zshrc`/`.bashrc`, and only if `~/.local/bin` isn't already on your PATH. It says so when it does.
 
 ### The three commands you'll actually use
 
@@ -53,9 +57,9 @@ promptly report                      # how you're prompting in this folder
 ./scripts/dev                        # launch the dashboard at localhost:3000
 ```
 
-Everything else is optional.
+Everything else is optional. `promptly doctor` re-checks every part of the setup.
 
-Two optional extras, each only needed for one thing:
+Three optional extras, each needed for exactly one feature:
 
 ```bash
 backend/venv/bin/pip install anthropic                     # prompt rewrites + playbook
@@ -63,15 +67,22 @@ backend/venv/bin/pip install "mcp[cli]"                    # Claude desktop exte
 backend/venv/bin/pip install torch sentence-transformers   # training the MLP
 ```
 
-### Terminal
+<details>
+<summary><b>Setting it up by hand instead</b></summary>
 
 ```bash
-ln -s "$PWD/scripts/promptly" ~/.local/bin/promptly   # put it on your PATH
-promptly install-hook                                 # auto-import after each session
-promptly                                              # see every command
+python3 -m venv backend/venv
+backend/venv/bin/pip install -r backend/requirements.txt
+ln -s "$PWD/scripts/promptly" ~/.local/bin/promptly    # put it on your PATH
+promptly install-hook                                  # auto-import after each session
+promptly sync                                          # import existing history
 ```
 
-`install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run.
+</details>
+
+### Terminal
+
+`install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run. Run `promptly` on its own to see every command.
 
 > **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) and picks up the symlink above. Run the same `promptly` commands there as in Terminal.app — one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
 
@@ -110,13 +121,13 @@ The launcher re-execs under the repo venv, so it works from any directory regard
 
 ### VS Code
 
+Already installed by `./setup` — just reload the window (`Cmd+Shift+P` → *Developer: Reload Window*) and the Prompt.ly icon appears in the activity bar. To link it by hand:
+
 ```bash
 ln -s "$PWD/vscode-extension" ~/.vscode/extensions/promptly-1.0.0
 ```
 
-Reload the window (`Cmd+Shift+P` → *Developer: Reload Window*). The Prompt.ly icon appears in the activity bar.
-
-- **Sidebar** — score, trend, factor bars, recommendations, worst prompts for the folder you have open
+- **Sidebar** — score, trend, factor bars, token cost, recommendations, worst prompts for the folder you have open
 - **Status bar** — this project's score, always visible
 - **Right-click any selection** → *Prompt.ly: Score selected text as a prompt*
 - Multi-root aware: re-targets when you switch between projects
