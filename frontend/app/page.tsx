@@ -9,12 +9,7 @@ import { StatTile, TrendPill } from "@/components/StatTile";
 import TokenCost from "@/components/TokenCost";
 import { CardListSkeleton, EmptyState, ErrorState, Skeleton, StatRowSkeleton } from "@/components/states";
 import { ChevronRightIcon, FolderIcon } from "@/components/icons";
-
-function compact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
+import { compact } from "@/lib/format";
 
 export default function OverviewPage() {
   const workspace = useQuery("workspace", api.activeWorkspace, { staleMs: 120_000 });

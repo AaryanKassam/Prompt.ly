@@ -1,4 +1,5 @@
 import type { TokenEconomics } from "@/lib/api";
+import { compact } from "@/lib/format";
 
 /**
  * What this project's prompting actually cost, in tokens.
@@ -16,13 +17,6 @@ const BAND_STYLE: Record<string, string> = {
   heavy: "text-score-low",
   unknown: "text-content-subtle",
 };
-
-function compact(n: number | null): string {
-  if (n === null || n === undefined) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
 
 export default function TokenCost({ econ }: { econ: TokenEconomics }) {
   if (!econ || !econ.prompts_with_tokens) return null;

@@ -85,11 +85,18 @@ def upsert_session(db: DbSession, parsed: ParsedSession, result: ImportResult) -
             # Already imported. Token columns added after the first release are
             # still backfilled, so historical turns don't report zero cost
             # forever — re-parsing the log is the only place these values exist.
+            changed = False
             if prior.cache_read_tokens is None and p.cache_read_tokens:
                 prior.cache_read_tokens = p.cache_read_tokens
-                result.prompts_updated += 1
+                changed = True
             if prior.cache_creation_tokens is None and p.cache_creation_tokens:
                 prior.cache_creation_tokens = p.cache_creation_tokens
+                changed = True
+            # Counted once per prompt, and for either column: a turn can carry
+            # cache-creation tokens with no cache reads, and that backfill is
+            # just as real as the other.
+            if changed:
+                result.prompts_updated += 1
             continue
         prompt = Prompt(
             session_id=session.id,

@@ -68,11 +68,18 @@ _FILLER_PHRASES = {
 # Phrases that cap the size of the reply. Output dominates the token bill —
 # median output on real turns is ~6k tokens against a near-zero uncached input —
 # so bounding the response is the single biggest lever a prompt has.
+# Every phrase here must be about the *reply's* size. Bare counters like
+# "in one" and "in two" are not: they match "fix it in one of the parsers" and
+# "refactor in two places", which say nothing about how long the answer should
+# be. Each entry carries enough context to be unambiguous on its own.
 _RESPONSE_BOUND_PHRASES = {
-    "briefly", "in one", "in two", "in three", "one sentence", "a few bullets",
-    "bullet", "just the", "only the", "no explanation", "don't explain",
+    "briefly", "in one sentence", "in two sentences", "in three sentences",
+    "one sentence", "a few bullets", "bullet points", "bullets",
+    "just the", "only the", "no explanation", "no preamble", "don't explain",
     "do not explain", "without explaining", "concise", "at most", "no more than",
-    "keep it", "tl;dr", "diff only", "code only", "one paragraph", "limit the",
+    "keep it short", "keep it brief", "keep it under", "tl;dr", "diff only",
+    "code only", "one paragraph", "in a sentence", "limit your response",
+    "limit the response", "be brief", "short answer",
 }
 
 _OUTPUT_FORMAT_PHRASES = {

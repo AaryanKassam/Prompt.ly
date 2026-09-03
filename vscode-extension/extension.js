@@ -204,10 +204,13 @@ function errorHtml(message) {
   );
 }
 
+// Unit chosen from the rounded value, not the raw one: picking it first makes
+// 999,999 render as "1000.0k". 999,950 is where toFixed(1) rounds up to 1000.0.
 function compactNum(n) {
-  if (n === null || n === undefined) return "—";
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 999950) return `${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
   return String(n);
 }
 

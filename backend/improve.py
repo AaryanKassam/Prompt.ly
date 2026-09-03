@@ -15,6 +15,7 @@ import re
 
 from .ingestion.classify import clean
 from .ml.features import extract_signals
+from .ml.rubric import WEIGHTS
 
 # Human-readable name + why it costs you, per signal.
 ISSUES: dict[str, tuple[str, str]] = {
@@ -80,7 +81,9 @@ def _sentences(text: str) -> list[str]:
 def find_issues(text: str) -> list[dict]:
     """Every signal the prompt misses, worst-weighted factors first."""
     signals = extract_signals(text)
-    order = ["clarity", "specificity", "context", "constraints", "scope", "examples", "efficiency"]
+    # Derived from WEIGHTS rather than restated, so reweighting a factor can
+    # never leave this list silently out of order.
+    order = sorted(WEIGHTS, key=lambda f: WEIGHTS[f], reverse=True)
     issues = []
     for factor in order:
         for name, hit in signals.get(factor, {}).items():

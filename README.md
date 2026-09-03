@@ -186,26 +186,28 @@ So Prompt.ly measures both:
 
 | Signal | Evidence |
 |---|---|
-| `concise_prompt` (≤60 words) | **p = 0.010** — median 3.3k vs 14.1k output tokens |
-| `no_filler_phrases` | p = 0.094 — median 3.7k vs 13.9k |
-| `bounds_response_size` | underpowered (only 5 prompts in the corpus bound their reply) |
-| `no_redundant_restatement` | not separated on this corpus |
+| `concise_prompt` (≤60 words) | **p = 0.0003** — median 5.9k vs 24.3k output tokens |
+| `no_filler_phrases` | p = 0.31 — not separated |
+| `no_redundant_restatement` | p = 0.84 — not separated |
+| `bounds_response_size` | p = 0.94 — not separated |
 
-Measured by Mann–Whitney U on 45 real turns. Only the first is significant at p < 0.05; the other two are kept because each directly causes tokens to be spent, but they are **not yet demonstrated**, and the 15% weight is set to reflect that rather than to overstate it. Retune with `PROMPTLY_EFFICIENCY_WEIGHT=0.25` — the other six factors rescale to keep the weights summing to 1.
+Measured by Mann–Whitney U on 75 real turns carrying token counts. **Only length separates**, and it separates hard: long prompts drew four times the output.
+
+An earlier run of this table on 45 turns put `no_filler_phrases` at p = 0.094. It did not survive the sample more than doubling — worth recording rather than quietly re-tuning, because it is exactly the kind of result that looks real until it isn't. The three non-separating signals are kept because each still directly causes tokens to be spent, and because a signal that fails to predict *reply length* may still be worth writing; they are not evidence for anything yet. The 15% weight reflects one demonstrated signal out of four, not four. Retune with `PROMPTLY_EFFICIENCY_WEIGHT=0.25` — the other six factors rescale to keep the weights summing to 1.
 
 **Measured token economics** is the other half — what your prompting actually cost, from the transcript:
 
 ```
 token cost
-      total tokens  156,630,884
-  context / output  156,108,884 · 522,000
- median per prompt  9,893 out  (typical)
-  per file changed  6,960 out
+      total tokens  158,780,480
+  context / output  158,255,653 · 524,827
+ median per prompt  7,897 out  (typical)
+  per file changed  9,049 out
 ```
 
 Two things worth knowing about these numbers:
 
-- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude — this repo's real figure is ~156M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
+- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude — this repo's real figure is ~158M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
 - **Cost per file changed is the honest metric.** Raw totals punish a big task for being big. Normalising by work delivered is what makes a one-line fix and a refactor comparable.
 
 Neither number is causal. A prompt that costs 60k tokens may have been doing 60k tokens of legitimate work; these are observational figures on one corpus, and they are labelled that way in the code.
@@ -223,13 +225,13 @@ Neither number is causal. A prompt that costs 60k tokens may have been doing 60k
 
 Those four figures come from a fixed fixture, so they are reproducible: `promptly validate` gives the same answer on your machine as on mine.
 
-It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework. On this machine's 55 scored prompts that correlation is **r = 0.165**.
+It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework. On this machine's 109 scored prompts `promptly validate` reports **r = 0.297**.
 
-That number is low, and worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and 55 prompts is a small sample. Adding the efficiency factor moved it from **0.103 to 0.165** on the same corpus — a real improvement, on a metric that still has a long way to go.
+That is still modest, and worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem. Rescoring the same prompts under both weightings puts the six-factor rubric at r = 0.253 and the seven-factor one at **0.305** — so the efficiency factor earns its place, on a metric that still has a long way to go. (That pair is recomputed in memory, which is why it differs slightly from the figure `validate` reads back from stored scores.)
 
 Against token cost specifically, the efficiency factor correlates **r = −0.211** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
 
-> Every figure in this section that comes from *real prompts* — the correlations, the token totals above — is a snapshot of one machine's corpus on 2026-08-31 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
+> Every figure in this section that comes from *real prompts* — the correlations, the token totals above — is a snapshot of one machine's corpus on 2026-09-03 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
 
 ---
 
@@ -301,7 +303,7 @@ prompt.ly/
 
 Two details worth knowing:
 
-**Transcript noise is excluded.** Half of the recorded "user turns" were never typed by a person. In this repo's 108 rows: 33 system notices, 10 skill injections, 10 slash-command echoes and 1 empty turn, against 54 real prompts. They're long and well-structured, so they scored *highly* and crowded out genuine prompts in the rankings. `ingestion/classify.py` filters them.
+**Transcript noise is excluded.** A large share of recorded "user turns" were never typed by a person — between a third and a half of this repo's, depending on how much real work has happened since. Of 169 rows: 35 system notices, 14 skill injections, 10 slash-command echoes and 1 empty turn, against 109 real prompts. They're long and well-structured, so they scored *highly* and crowded out genuine prompts in the rankings. `ingestion/classify.py` filters them.
 
 **Prompts are attributed by the files they touched**, not the directory Claude Code launched in — otherwise work on one repo counts towards another.
 

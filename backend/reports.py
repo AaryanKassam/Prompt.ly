@@ -174,37 +174,38 @@ def _preview(text: str | None, limit: int = 160) -> str:
     return t[:limit] + ("…" if len(t) > limit else "")
 
 
-# Median output tokens observed for prompts that pass / fail each efficiency
-# signal, measured on the corpus described in ml/features.py. Used to project a
-# reply size before the prompt is sent — see estimate_prompt_cost.
-_OBSERVED_OUTPUT = {"concise_and_clean": 3300, "mixed": 6000, "verbose": 14000}
+# Median output tokens observed either side of the length split, on 75 real
+# turns carrying token counts. Length is the only efficiency signal that
+# separates on this corpus (p=0.0003), so it is the only one the projection
+# bands on: an earlier version also branched on filler, but that split held 4
+# prompts and a median above the band it was supposed to beat — noise dressed
+# up as a third band.
+_OBSERVED_OUTPUT = {"concise": 4200, "verbose": 24400}
+
+# Prompts that capped the reply came in around half their band's median
+# (11.7k against 24.4k among long ones). Applied as a discount rather than a
+# band because the signal is rare enough that its own median is unstable.
+_BOUNDED_DISCOUNT = 0.5
 
 
 def estimate_prompt_cost(text: str) -> dict:
     """Project what a draft prompt will cost, before it is sent.
 
     The input side is a character estimate; the output side is the median
-    observed for prompts with the same efficiency signals, which matters far
-    more — generated tokens outnumber uncached input by orders of magnitude.
+    observed for prompts of the same shape, which matters far more — generated
+    tokens outnumber uncached input by orders of magnitude.
 
     This is a projection from one corpus, not a guarantee: a short prompt that
     launches a large refactor will blow straight through it.
     """
     signals = extract_signals(text).get("efficiency", {})
     concise = signals.get("concise_prompt", False)
-    clean_of_filler = signals.get("no_filler_phrases", False)
     bounded = signals.get("bounds_response_size", False)
 
-    if concise and clean_of_filler:
-        band = "concise_and_clean"
-    elif not concise:
-        band = "verbose"
-    else:
-        band = "mixed"
+    band = "concise" if concise else "verbose"
     projected = _OBSERVED_OUTPUT[band]
     if bounded:
-        # Prompts that cap the reply came in below their band's median.
-        projected = round(projected * 0.6)
+        projected = round(projected * _BOUNDED_DISCOUNT)
 
     return {
         # ~4 characters per token; close enough to size a draft.
@@ -242,10 +243,15 @@ def _token_economics(prompts: list[Prompt]) -> dict:
     )
     total_output = sum(outputs)
 
-    work = 0
+    # Distinct paths, not diff entries. Editing one file across ten turns is one
+    # file changed; counting the entries would inflate the denominator and make
+    # this disagree with totals.files_touched, which is already a set.
+    changed: set[str] = set()
     for p in prompts:
         d = p.file_diffs or {}
-        work += len(d.get("created") or []) + len(d.get("edited") or []) + len(d.get("deleted") or [])
+        for bucket in ("created", "edited", "deleted"):
+            changed.update(d.get(bucket) or [])
+    work = len(changed)
     tool_calls = sum(len(p.tool_calls or []) for p in prompts)
 
     median_output = statistics.median(outputs) if outputs else None
@@ -502,7 +508,21 @@ def fingerprint(db: DbSession, project_path: str) -> str:
     if not ids:
         return f"empty:{SCHEMA_VERSION}"
     latest = db.scalar(select(func.max(Score.scored_at)).where(Score.prompt_id.in_(ids)))
-    return f"v{SCHEMA_VERSION}:{len(ids)}:{max(ids)}:{latest.isoformat() if latest else '-'}"
+    # Token totals are part of the key because a backfill rewrites token columns
+    # on rows that already exist: the count, the newest id and the scoring time
+    # all stay put, so without this a cached report keeps serving the zeroed
+    # token economics it was built with before the cache columns were imported.
+    tokens = db.scalar(
+        select(
+            func.coalesce(func.sum(Prompt.output_tokens), 0)
+            + func.coalesce(func.sum(Prompt.cache_read_tokens), 0)
+            + func.coalesce(func.sum(Prompt.cache_creation_tokens), 0)
+        ).where(Prompt.id.in_(ids))
+    )
+    return (
+        f"v{SCHEMA_VERSION}:{len(ids)}:{max(ids)}:"
+        f"{latest.isoformat() if latest else '-'}:{tokens or 0}"
+    )
 
 
 def cached_report(

@@ -14,12 +14,7 @@ import Tooltip from "@/components/Tooltip";
 import { StatTile, TrendPill } from "@/components/StatTile";
 import { CardListSkeleton, EmptyState, ErrorState, StatRowSkeleton } from "@/components/states";
 import { ArrowLeftIcon, FileIcon, RefreshIcon, TerminalIcon } from "@/components/icons";
-
-function compact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
+import { compact } from "@/lib/format";
 
 function ReportView() {
   const params = useSearchParams();
