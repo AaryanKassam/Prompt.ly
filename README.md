@@ -1,8 +1,8 @@
 # prompt.ly
 
-Scores how effectively you prompt Claude, per project — then shows you how to improve.
+Scores how effectively you prompt Claude, per project, then shows you how to improve.
 
-Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across seven factors — six for quality, one for token efficiency — and reports how you're doing in whichever project you're working on. It runs entirely locally.
+Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across seven factors (six for quality, one for token efficiency), and reports how you're doing in whichever project you're working on. It runs entirely locally.
 
 ![Prompt.ly dashboard](docs/dashboard.png)
 
@@ -10,9 +10,9 @@ Prompt.ly reads the Claude Code session logs already on your machine, grades eve
 
 ## Why
 
-Everyone using an AI coding assistant is writing dozens of prompts a day, and nobody gets feedback on any of them. A vague prompt costs a search, a wrong guess, and a round trip — but that cost is invisible, so the habit never changes.
+Everyone using an AI coding assistant is writing dozens of prompts a day, and nobody gets feedback on any of them. A vague prompt costs a search, a wrong guess, and a round trip, but that cost is invisible, so the habit never changes.
 
-Prompt.ly makes it visible — in both directions. It found that 97% of my prompts never paste the actual error and 91% never name a file, and that a single two-word prompt (`"do both"`) cost 57,303 output tokens.
+Prompt.ly makes it visible, in both directions. It found that 97% of my prompts never paste the actual error and 92% never name a file, and that a single two-word prompt (`"do both"`) cost 57,303 output tokens.
 
 ---
 
@@ -37,7 +37,7 @@ Requires Python 3.10+ and Claude Code. One line:
 git clone https://github.com/AaryanKassam/Prompt.ly.git && cd Prompt.ly && ./setup
 ```
 
-`./setup` creates the virtualenv, installs the five dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds — naming each one as it goes.
+`./setup` creates the virtualenv, installs the five dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds, naming each one as it goes.
 
 It is **safe to re-run**: every step checks before it acts, so it doubles as a repair command when something drifts.
 
@@ -84,9 +84,9 @@ promptly sync                                          # import existing history
 
 `install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run. Run `promptly` on its own to see every command.
 
-> **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) that `./setup` configured. Run the same `promptly` commands there as in Terminal.app — one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
+> **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) that `./setup` configured. Run the same `promptly` commands there as in Terminal.app, one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
 
-**Score a prompt before you send it** — the thing only the terminal can do:
+**Score a prompt before you send it**, the thing only the terminal can do:
 
 ```bash
 promptly score "fix the parser"    # inline
@@ -103,7 +103,7 @@ It prints the score, the factor breakdown, and a projected token cost:
 ╰──────────────────────────────────────────────────────────────────────╯
 ```
 
-The projection comes from the median output observed for prompts with the same efficiency signals. It is a guide, not a guarantee — a short prompt that kicks off a large refactor will sail straight past it.
+The projection comes from the median output observed for prompts with the same efficiency signals. It is a guide, not a guarantee: a short prompt that kicks off a large refactor will sail straight past it.
 
 Then the rest:
 
@@ -125,18 +125,18 @@ The launcher re-execs under the repo venv, so it works from any directory regard
 
 ### VS Code
 
-Already installed by `./setup` — just reload the window (`Cmd+Shift+P` → *Developer: Reload Window*) and the Prompt.ly icon appears in the activity bar. To link it by hand:
+Already installed by `./setup`, just reload the window (`Cmd+Shift+P` → *Developer: Reload Window*) and the Prompt.ly icon appears in the activity bar. To link it by hand:
 
 ```bash
 ln -s "$PWD/vscode-extension" ~/.vscode/extensions/promptly-1.0.0
 ```
 
-- **Sidebar** — score, trend, factor bars, token cost, recommendations, worst prompts for the folder you have open
-- **Status bar** — this project's score, always visible
+- **Sidebar**: score, trend, factor bars, token cost, recommendations, worst prompts for the folder you have open
+- **Status bar**: this project's score, always visible
 - **Right-click any selection** → *Prompt.ly: Score selected text as a prompt*
 - Multi-root aware: re-targets when you switch between projects
 
-It holds no scoring logic — it shells out to `promptly report --json`. If the CLI isn't found automatically, set `promptly.cliPath` in settings to the absolute path of `scripts/promptly`.
+It holds no scoring logic; it shells out to `promptly report --json`. If the CLI isn't found automatically, set `promptly.cliPath` in settings to the absolute path of `scripts/promptly`.
 
 ### Dashboard
 
@@ -156,7 +156,7 @@ Restart the Claude desktop app, then ask *"what's my prompt report?"*. It auto-d
 
 ### Chrome extension (optional)
 
-Only needed to capture claude.ai — Claude Code is covered by the log parser. See [`extension/README.md`](extension/README.md).
+Only needed to capture claude.ai; Claude Code is covered by the log parser. See [`extension/README.md`](extension/README.md).
 
 ---
 
@@ -174,11 +174,11 @@ Every prompt is graded 0–10 across seven weighted factors, built from 23 struc
 | Scope | 9% | One task per request, sized to be reviewable |
 | Examples | 6% | Code, errors, or a concrete input/output case |
 
-**The scorer is deterministic and runs offline.** No language model is involved in producing a score — that's the point. A rubric you own is defensible; a wrapper around someone else's judgement isn't.
+**The scorer is deterministic and runs offline.** No language model is involved in producing a score, that's the point. A rubric you own is defensible; a wrapper around someone else's judgement isn't.
 
 ### Token efficiency
 
-Prompt quality and prompt *cost* are different axes, and the second one is where the money goes. `"do both"` scores 4.1/10 and is two words long — and it drew **57,303 output tokens**. Being terse is not the same as being efficient.
+Prompt quality and prompt *cost* are different axes, and the second one is where the money goes. `"do both"` scores 4.1/10 and is two words long, and it drew **57,303 output tokens**. Being terse is not the same as being efficient.
 
 So Prompt.ly measures both:
 
@@ -186,28 +186,28 @@ So Prompt.ly measures both:
 
 | Signal | Evidence |
 |---|---|
-| `concise_prompt` (≤60 words) | **p = 0.0003** — median 5.9k vs 24.3k output tokens |
-| `no_filler_phrases` | p = 0.31 — not separated |
-| `no_redundant_restatement` | p = 0.84 — not separated |
-| `bounds_response_size` | p = 0.94 — not separated |
+| `concise_prompt` (≤60 words) | **p = 0.0003**, median 5.9k vs 24.3k output tokens |
+| `no_filler_phrases` | p = 0.31, not separated |
+| `no_redundant_restatement` | p = 0.84, not separated |
+| `bounds_response_size` | p = 0.94, not separated |
 
 Measured by Mann–Whitney U on 75 real turns carrying token counts. **Only length separates**, and it separates hard: long prompts drew four times the output.
 
-An earlier run of this table on 45 turns put `no_filler_phrases` at p = 0.094. It did not survive the sample more than doubling — worth recording rather than quietly re-tuning, because it is exactly the kind of result that looks real until it isn't. The three non-separating signals are kept because each still directly causes tokens to be spent, and because a signal that fails to predict *reply length* may still be worth writing; they are not evidence for anything yet. The 15% weight reflects one demonstrated signal out of four, not four. Retune with `PROMPTLY_EFFICIENCY_WEIGHT=0.25` — the other six factors rescale to keep the weights summing to 1.
+An earlier run of this table on 45 turns put `no_filler_phrases` at p = 0.094. It did not survive the sample more than doubling, worth recording rather than quietly re-tuning, because it is exactly the kind of result that looks real until it isn't. The three non-separating signals are kept because each still directly causes tokens to be spent, and because a signal that fails to predict *reply length* may still be worth writing; they are not evidence for anything yet. The 15% weight reflects one demonstrated signal out of four, not four. Retune with `PROMPTLY_EFFICIENCY_WEIGHT=0.25`; the other six factors rescale to keep the weights summing to 1.
 
-**Measured token economics** is the other half — what your prompting actually cost, from the transcript:
+**Measured token economics** is the other half: what your prompting actually cost, from the transcript.
 
 ```
 token cost
-      total tokens  158,780,480
-  context / output  158,255,653 · 524,827
- median per prompt  7,897 out  (typical)
-  per file changed  9,049 out
+      total tokens  178,773,152
+  context / output  178,223,146 · 550,006
+ median per prompt  6,193 out  (typical)
+  per file changed  9,483 out
 ```
 
 Two things worth knowing about these numbers:
 
-- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude — this repo's real figure is ~158M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
+- **Context includes cache.** Claude Code caches aggressively, so the raw `input_tokens` field has a median of *2*. Reading it alone understates a project's context cost by four orders of magnitude, this repo's real figure is ~179M, not the 20k a naive reading gives. Prompt.ly sums `input + cache_read + cache_creation`.
 - **Cost per file changed is the honest metric.** Raw totals punish a big task for being big. Normalising by work delivered is what makes a one-line fix and a refactor comparable.
 
 Neither number is causal. A prompt that costs 60k tokens may have been doing 60k tokens of legitimate work; these are observational figures on one corpus, and they are labelled that way in the code.
@@ -225,13 +225,13 @@ Neither number is causal. A prompt that costs 60k tokens may have been doing 60k
 
 Those four figures come from a fixed fixture, so they are reproducible: `promptly validate` gives the same answer on your machine as on mine.
 
-It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts — so the rubric isn't grading its own homework. On this machine's 109 scored prompts `promptly validate` reports **r = 0.297**.
+It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts, so the rubric isn't grading its own homework. Across every project tracked on this machine, `promptly validate` reports **r = 0.298** on 156 scored prompts.
 
-That is still modest, and worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem. Rescoring the same prompts under both weightings puts the six-factor rubric at r = 0.253 and the seven-factor one at **0.305** — so the efficiency factor earns its place, on a metric that still has a long way to go. (That pair is recomputed in memory, which is why it differs slightly from the figure `validate` reads back from stored scores.)
+That is still modest, worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem. Rescoring the same prompts under both weightings puts the six-factor rubric at r = 0.300 and the seven-factor one at **0.329**, so the efficiency factor earns its place, on a metric that still has a long way to go. (That pair is recomputed in memory over a slightly different prompt set, which is why it doesn't match the figure `validate` reads back from stored scores exactly.)
 
-Against token cost specifically, the efficiency factor correlates **r = −0.211** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
+Against token cost specifically, the efficiency factor correlates **r = −0.212** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
 
-> Every figure in this section that comes from *real prompts* — the correlations, the token totals above — is a snapshot of one machine's corpus on 2026-09-03 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
+> Every figure in this section that comes from *real prompts*, the correlations and the token totals above, is a snapshot of one machine's corpus on 2026-09-07 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
 
 ---
 
@@ -239,8 +239,8 @@ Against token cost specifically, the efficiency factor correlates **r = −0.211
 
 Two optional features, both garnish over numbers measured locally first:
 
-- **Rewrite this prompt** — a full rewrite of one weak prompt
-- **Playbook** — turns your measured weaknesses into a personalised guide with your own prompts rewritten
+- **Rewrite this prompt**: a full rewrite of one weak prompt
+- **Playbook**: turns your measured weaknesses into a personalised guide with your own prompts rewritten
 
 Both need an API key. Everything else works without one.
 
@@ -249,7 +249,7 @@ cp .env.example .env      # then paste your key into ANTHROPIC_API_KEY
 ./scripts/dev             # restart to pick it up
 ```
 
-Rewrites return an **assumptions list** naming anything the model invented — a file path, a rationale — so it's never presented as fact you can rely on.
+Rewrites return an **assumptions list** naming anything the model invented, a file path, a rationale, so it's never presented as fact you can rely on.
 
 ---
 
@@ -303,9 +303,9 @@ prompt.ly/
 
 Two details worth knowing:
 
-**Transcript noise is excluded.** A large share of recorded "user turns" were never typed by a person — between a third and a half of this repo's, depending on how much real work has happened since. Of 169 rows: 35 system notices, 14 skill injections, 10 slash-command echoes and 1 empty turn, against 109 real prompts. They're long and well-structured, so they scored *highly* and crowded out genuine prompts in the rankings. `ingestion/classify.py` filters them.
+**Transcript noise is excluded.** A large share of recorded "user turns" were never typed by a person: between a third and a half of this repo's, depending on how much real work has happened since. Of 169 rows: 35 system notices, 14 skill injections, 10 slash-command echoes and 1 empty turn, against 109 real prompts. They're long and well-structured, so they scored *highly* and crowded out genuine prompts in the rankings. `ingestion/classify.py` filters them.
 
-**Prompts are attributed by the files they touched**, not the directory Claude Code launched in — otherwise work on one repo counts towards another.
+**Prompts are attributed by the files they touched**, not the directory Claude Code launched in, otherwise work on one repo counts towards another.
 
 ---
 
