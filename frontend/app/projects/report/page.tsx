@@ -101,7 +101,7 @@ function ReportView() {
           title="No prompts recorded for this folder"
           description={
             <>
-              Use Claude Code here, then hit refresh — Prompt.ly reads the session
+              Use Claude Code here, then hit refresh. Prompt.ly reads the session
               logs already on your machine.
             </>
           }
@@ -114,7 +114,7 @@ function ReportView() {
               label="Prompt score"
               value={
                 <span className="flex items-baseline gap-2">
-                  {r.overall?.toFixed(1) ?? "—"}
+                  {r.overall?.toFixed(1) ?? "–"}
                   <span className="text-sm font-medium text-content-subtle">
                     {r.grade}
                   </span>

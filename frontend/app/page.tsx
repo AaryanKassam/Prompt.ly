@@ -48,7 +48,7 @@ export default function OverviewPage() {
           ) : workspace.isLoading ? (
             <Skeleton className="h-4 w-64" />
           ) : (
-            "No editor workspace detected — pick a project below."
+            "No editor workspace detected. Pick a project below."
           )}
         </div>
       </header>
@@ -62,7 +62,7 @@ export default function OverviewPage() {
             label="Prompt score"
             value={
               <span className="flex items-baseline gap-2">
-                {r.overall?.toFixed(1) ?? "—"}
+                {r.overall?.toFixed(1) ?? "–"}
                 <span className="text-sm font-medium text-content-subtle">
                   {r.grade}
                 </span>

@@ -20,7 +20,7 @@ const firaCode = Fira_Code({
 });
 
 export const metadata: Metadata = {
-  title: "Prompt.ly — prompt analytics",
+  title: "Prompt.ly: prompt analytics",
   description:
     "Scores how effectively you prompt Claude, per project. Runs entirely on your machine.",
 };

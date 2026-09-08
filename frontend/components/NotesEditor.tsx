@@ -88,7 +88,7 @@ export default function NotesEditor({
         )}
         {status === "error" && (
           <span className="text-sm text-score-low">
-            Couldn&apos;t save — is the backend running?
+            Couldn&apos;t save. Is the backend running?
           </span>
         )}
       </div>

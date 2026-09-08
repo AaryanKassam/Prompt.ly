@@ -39,7 +39,7 @@ ISSUES: dict[str, tuple[str, str]] = {
     "examples.has_before_after": ("No before/after", "Current-vs-desired is the fastest way to convey a behaviour change."),
     "examples.has_inline_example": ("No example", "One concrete case removes more ambiguity than a paragraph of description."),
     "efficiency.concise_prompt": ("Over ~60 words", "Long prompts draw long answers: the turns measured here cost a median 14k output tokens against 3.3k for short ones."),
-    "efficiency.no_filler_phrases": ("Conversational filler", "\"Can you\" and \"please\" frame the turn as a chat, and chats get chatty — and expensive — replies."),
+    "efficiency.no_filler_phrases": ("Conversational filler", "\"Can you\" and \"please\" frame the turn as a chat, and chats get chatty, and expensive, replies."),
     "efficiency.bounds_response_size": ("Reply size unbounded", "Nothing caps the answer, so the model picks the length. Output is where nearly all the tokens go."),
     "efficiency.no_redundant_restatement": ("Repeats itself", "The same instruction appears twice, paying tokens for it twice."),
 }
@@ -147,7 +147,7 @@ def rewrite(text: str) -> dict:
     if not spec["has_concrete_output_format"]:
         additions.append("Output: [a diff / a function signature / JSON with keys x, y]")
     if not (con["has_negative_constraint"] or con["specifies_scope_limit"]):
-        additions.append("Constraints: [what not to touch — files, deps, behaviour]")
+        additions.append("Constraints: [what not to touch: files, deps, behaviour]")
     if not (ex["has_code_block"] or ex["has_inline_example"] or ex["has_before_after"]):
         additions.append("Example: [concrete input → the output you expect]")
 

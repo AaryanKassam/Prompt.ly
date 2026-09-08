@@ -61,7 +61,7 @@ def _load(path: Path) -> dict:
     try:
         return json.loads(path.read_text())
     except json.JSONDecodeError:
-        print(f"  ! {path} is not valid JSON — leaving it alone.")
+        print(f"  ! {path} is not valid JSON, leaving it alone.")
         raise SystemExit(1)
 
 

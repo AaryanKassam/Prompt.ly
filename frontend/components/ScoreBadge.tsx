@@ -51,7 +51,7 @@ export default function ScoreBadge({
                   tabular-nums ring-1 ${sizing} ${PILL[scoreTone(score)]}`}
       title={score === null ? "Not scored" : `${score.toFixed(2)} out of 10`}
     >
-      {score === null ? "—" : score.toFixed(1)}
+      {score === null ? "–" : score.toFixed(1)}
     </span>
   );
 }

@@ -38,7 +38,7 @@ mcp = MCPServer(
     instructions=(
         "Prompt.ly analyses how effectively the user writes prompts. "
         "Call `prompt_report` when they ask how they're doing, how their prompting "
-        "looks in this project, or for a prompt report — it auto-detects the folder "
+        "looks in this project, or for a prompt report; it auto-detects the folder "
         "open in their editor, so a path is rarely needed. Call `score_draft_prompt` "
         "when they want feedback on a prompt before sending it."
     ),
@@ -96,7 +96,7 @@ def prompt_report(path: str | None = None, refresh: bool = False) -> str:
     description=(
         "Score a draft prompt 0-10 across clarity, specificity, context, constraints, "
         "scope, examples and token efficiency, and project what it will cost in "
-        "tokens — use before sending a prompt."
+        "tokens; use before sending a prompt."
     )
 )
 def score_draft_prompt(text: str) -> str:
@@ -128,7 +128,7 @@ def score_draft_prompt(text: str) -> str:
         lines += ["", "**To improve this prompt:**", ""]
         lines += [f"- {advice}" for advice in missed[:5]]
     else:
-        lines += ["", "No weaknesses detected — this prompt is well-formed."]
+        lines += ["", "No weaknesses detected, this prompt is well-formed."]
     return "\n".join(lines)
 
 
@@ -146,7 +146,7 @@ def detect_workspace() -> str:
         lines += [f"**Active:** `{active.path}` (via {active.editor})", ""]
     if others:
         lines += ["**Recently open:**", ""]
-        lines += [f"- `{w.path}` — {w.editor}" for w in others]
+        lines += [f"- `{w.path}`: {w.editor}" for w in others]
     return "\n".join(lines)
 
 
@@ -178,7 +178,7 @@ def list_tracked_projects() -> str:
     if not rows:
         return "No projects tracked yet. Run `python scripts/import_jsonl.py` first."
     return "\n".join(
-        f"- `{path}` — {count} prompts, avg {round(avg, 2) if avg else '—'}/10"
+        f"- `{path}`: {count} prompts, avg {round(avg, 2) if avg else '–'}/10"
         for path, count, avg in rows
     )
 

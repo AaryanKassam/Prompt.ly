@@ -26,7 +26,7 @@ FACTOR_MEANING = {
     "clarity": "States one unambiguous action in active voice",
     "specificity": "Names files, identifiers and the expected output shape",
     "context": "Supplies background, intent and the relevant stack",
-    "constraints": "Bounds the work — what not to change, where to stop",
+    "constraints": "Bounds the work: what not to change, where to stop",
     "scope": "One task per request, sized to be reviewable",
     "examples": "Shows code, errors, or a concrete input/output case",
     "efficiency": "Spends tokens sparingly and bounds the size of the reply",
@@ -126,7 +126,7 @@ def render_html(payload: dict, benchmark: dict | None = None) -> str:
     """Self-contained HTML: no external assets, prints cleanly to PDF."""
     e = html.escape
     overall = payload["overall"]
-    score_text = f"{overall:.1f}" if isinstance(overall, (int, float)) else "—"
+    score_text = f"{overall:.1f}" if isinstance(overall, (int, float)) else "–"
 
     factor_rows = "".join(
         f"""<tr>
@@ -135,7 +135,7 @@ def render_html(payload: dict, benchmark: dict | None = None) -> str:
                 <span class="means">{e(f['measures'])}</span>
               </th>
               <td class="barcell">{_bar((f['score'] or 0) * 10, _tone(f['score']))}</td>
-              <td class="num">{f['score'] if f['score'] is not None else '—'}</td>
+              <td class="num">{f['score'] if f['score'] is not None else '–'}</td>
             </tr>"""
         for f in payload["factors"]
     )
@@ -169,7 +169,7 @@ def render_html(payload: dict, benchmark: dict | None = None) -> str:
 
     def _fmt(key: str) -> str:
         val = econ.get(key)
-        return f"{val:,}" if isinstance(val, int) else "—"
+        return f"{val:,}" if isinstance(val, int) else "–"
 
     token_section = ""
     if econ.get("total_tokens"):
@@ -197,7 +197,7 @@ one-line fix and a refactor can be compared. Spend band for this project:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Prompt quality report — {e(payload['project'])}</title>
+<title>Prompt quality report: {e(payload['project'])}</title>
 <style>
   :root {{
     --bg:#fff; --fg:#111827; --muted:#6b7280; --faint:#9ca3af;
@@ -287,7 +287,7 @@ one-line fix and a refactor can be compared. Spend band for this project:
 </div>
 
 {token_section}
-<h2>Habit frequency — share of prompts meeting each signal</h2>
+<h2>Habit frequency: share of prompts meeting each signal</h2>
 <table><tbody>{habit_rows}</tbody></table>
 
 <h2>Focus areas</h2>

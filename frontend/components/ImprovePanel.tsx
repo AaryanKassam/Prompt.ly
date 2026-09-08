@@ -74,7 +74,7 @@ export default function ImprovePanel({ prompt }: { prompt: ReportPromptRef }) {
                 {data.issues.slice(0, 6).map((issue) => (
                   <li key={issue.signal} className="text-sm leading-relaxed">
                     <span className="font-medium text-score-mid">{issue.label}</span>
-                    <span className="text-content-muted"> — {issue.why}</span>
+                    <span className="text-content-muted">: {issue.why}</span>
                   </li>
                 ))}
               </ul>
@@ -105,7 +105,7 @@ export default function ImprovePanel({ prompt }: { prompt: ReportPromptRef }) {
               {data.slots > 0 && (
                 <p className="mt-1.5 text-2xs text-content-faint">
                   {data.slots} bracketed slot{data.slots === 1 ? "" : "s"} left for you to
-                  fill — the template won&apos;t guess a file path or a reason it doesn&apos;t know.
+                  fill, the template won&apos;t guess a file path or a reason it doesn&apos;t know.
                 </p>
               )}
 
@@ -148,7 +148,7 @@ export default function ImprovePanel({ prompt }: { prompt: ReportPromptRef }) {
                   {data.llm_rewrite.assumptions.length > 0 && (
                     <div className="mt-2 rounded bg-score-mid/10 px-2 py-1.5">
                       <p className="text-2xs font-medium text-score-mid">
-                        Invented — check these before sending:
+                        Invented, check these before sending:
                       </p>
                       <ul className="mt-0.5 space-y-0.5">
                         {data.llm_rewrite.assumptions.map((a) => (

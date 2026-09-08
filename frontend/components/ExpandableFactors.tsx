@@ -166,7 +166,7 @@ export default function ExpandableFactors({
                 />
               </span>
               <span className="w-9 shrink-0 text-right text-sm tabular-nums text-content-muted">
-                {value === null ? "—" : value.toFixed(1)}
+                {value === null ? "–" : value.toFixed(1)}
               </span>
             </button>
 

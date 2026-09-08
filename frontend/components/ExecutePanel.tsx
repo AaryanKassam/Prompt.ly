@@ -254,7 +254,7 @@ export default function ExecutePanel({
 
           <p className="border-t border-line pt-2.5 text-2xs text-content-faint">
             Written by Claude from your measured weaknesses. Scores, percentages and
-            signals are computed locally — the model only writes the prose and rewrites.
+            signals are computed locally; the model only writes the prose and rewrites.
           </p>
         </div>
       )}

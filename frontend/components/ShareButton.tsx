@@ -50,7 +50,7 @@ export default function ShareButton({ path }: { path?: string }) {
           >
             <p className="text-2xs leading-relaxed text-content-muted">
               Downloads a report containing scores, factor breakdowns and habit
-              rates — and <span className="text-content">no prompt text, file
+              rates, and <span className="text-content">no prompt text, file
               paths or session titles</span>. Safe to send to someone outside the
               project.
             </p>

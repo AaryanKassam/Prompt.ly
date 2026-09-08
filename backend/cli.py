@@ -362,7 +362,7 @@ def cmd_score(args: argparse.Namespace) -> int:
             fixes.add_row("→", Text(advice, style="white"))
         blocks.append(Panel(fixes, title="to improve", border_style="grey30", padding=(0, 1)))
     else:
-        blocks.append(Text("No weaknesses detected — this prompt is well-formed.", style="green"))
+        blocks.append(Text("No weaknesses detected, this prompt is well-formed.", style="green"))
 
     console.print(Group(*blocks))
     return 0
@@ -420,7 +420,7 @@ def cmd_projects(args: argparse.Namespace) -> int:
         name = Text(path.rstrip("/").split("/")[-1], style="white")
         name.append(marker)
         table.add_row(
-            Text(f"{avg:.1f}" if avg else "—", style=tone(avg)),
+            Text(f"{avg:.1f}" if avg else "–", style=tone(avg)),
             str(count),
             name,
         )
@@ -501,7 +501,7 @@ def cmd_install_hook(args: argparse.Namespace) -> int:
         try:
             settings = json.loads(settings_path.read_text())
         except json.JSONDecodeError:
-            console.print(f"[red]{settings_path} is not valid JSON — leaving it alone.[/red]")
+            console.print(f"[red]{settings_path} is not valid JSON, leaving it alone.[/red]")
             return 1
 
     hooks = settings.setdefault("hooks", {})
@@ -626,7 +626,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks.append((
         "Claude Code logs", n_logs > 0,
         f"{n_logs} session file(s) in {logs}" if n_logs
-        else f"none found in {logs} — use Claude Code, then run `promptly sync`",
+        else f"none found in {logs}; use Claude Code, then run `promptly sync`",
     ))
 
     db = SessionLocal()
@@ -640,21 +640,21 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks.append((
         "Database", total > 0,
         f"{scored} real prompts ({total - scored} transcript rows excluded)" if total
-        else "empty — run `promptly sync`",
+        else "empty; run `promptly sync`",
     ))
 
     # .env is what makes one key reach every surface.
     env_file = repo / ".env"
     checks.append((
         ".env file", env_file.exists(),
-        str(env_file) if env_file.exists() else f"missing — `cp .env.example .env`",
+        str(env_file) if env_file.exists() else f"missing; run `cp .env.example .env`",
     ))
 
     key_set = llm_available()
     checks.append((
         "Claude API", key_set,
-        "configured — Execute and Claude rewrites are enabled" if key_set
-        else "no key — offline features work; set ANTHROPIC_API_KEY in .env to enable rewrites",
+        "configured: Execute and Claude rewrites are enabled" if key_set
+        else "no key: offline features work; set ANTHROPIC_API_KEY in .env to enable rewrites",
     ))
 
     model = active_model_info()
@@ -667,10 +667,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         meta = _json.loads(weights[-1].read_text())
         detail = (
             f"MLP v{meta['version']} trained on {meta['examples']}, inactive until "
-            f"{BLEND_MIN_EXAMPLES} — scoring with the rubric"
+            f"{BLEND_MIN_EXAMPLES}; scoring with the rubric"
         )
     else:
-        detail = "rubric only — no model trained yet"
+        detail = "rubric only, no model trained yet"
     checks.append(("Scoring model", None, detail))
 
     # Auto-import hook.
@@ -688,8 +688,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             hooked = False
     checks.append((
         "Auto-sync hook", hooked,
-        "installed — sessions import themselves" if hooked
-        else "not installed — run `promptly install-hook`",
+        "installed: sessions import themselves" if hooked
+        else "not installed; run `promptly install-hook`",
     ))
 
     # Claude desktop / Claude Code MCP registration.
@@ -709,7 +709,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks.append((
         "Claude extension", bool(registered),
         f"registered with {', '.join(registered)}" if registered
-        else "not registered — run `python mcp_server/install.py`",
+        else "not registered; run `python mcp_server/install.py`",
     ))
 
     # VS Code extension.
@@ -717,7 +717,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks.append((
         "VS Code extension", ext.exists(),
         "installed" if ext.exists()
-        else f'not installed — ln -s "{repo}/vscode-extension" {ext}',
+        else f'not installed; ln -s "{repo}/vscode-extension" {ext}',
     ))
 
     if args.json:
@@ -775,7 +775,7 @@ def cmd_share(args: argparse.Namespace) -> int:
 
     console.print(f"[green]Wrote[/green] {out}")
     console.print(
-        "[grey50]Aggregate scores and rates only — no prompt text, file paths "
+        "[grey50]Aggregate scores and rates only, no prompt text, file paths "
         "or session titles.[/grey50]"
     )
     if not args.anonymize:
@@ -888,7 +888,7 @@ COMMAND_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
 def print_overview() -> None:
     """Friendly command list — what `promptly` alone and `promptly help` show."""
     console.print()
-    console.print("  [bold]promptly[/bold] [grey50]— how well are you prompting?[/grey50]")
+    console.print("  [bold]promptly:[/bold] [grey50]how well are you prompting?[/grey50]")
 
     for heading, rows in COMMAND_GROUPS:
         console.print(f"\n  [grey50]{heading}[/grey50]")

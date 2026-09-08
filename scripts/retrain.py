@@ -35,8 +35,8 @@ def main() -> int:
         print(f"Not trained: {result.get('reason')}")
         return 0
     print(
-        f"Trained model v{result['version']} on {result['examples']} examples "
-        f"— MAE {result['mae']}, R² {result['r2']}\nWeights: {result['weights']}"
+        f"Trained model v{result['version']} on {result['examples']} examples: "
+        f"MAE {result['mae']}, R² {result['r2']}\nWeights: {result['weights']}"
     )
     return 0
 

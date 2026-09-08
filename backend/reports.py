@@ -29,26 +29,26 @@ from .models import Prompt, ReportCache, Score, Session
 # One piece of concrete advice per signal, phrased as the fix rather than the flaw.
 RECOMMENDATIONS: dict[str, str] = {
     "clarity.single_imperative_verb": "Open with one clear action verb (\"Add…\", \"Fix…\", \"Refactor…\") instead of describing the situation first.",
-    "clarity.no_passive_voice": "Say who does what — \"rename the handler\" rather than \"the handler should be renamed\".",
+    "clarity.no_passive_voice": "Say who does what: \"rename the handler\" rather than \"the handler should be renamed\".",
     "clarity.no_hedge_words": "Cut hedges like \"maybe\", \"I think\", \"sort of\". Commit to the request; you can always correct it afterwards.",
-    "clarity.sentence_count_le_5": "Keep prompts under ~5 sentences. Long prompts bury the actual ask — split them into separate turns.",
+    "clarity.sentence_count_le_5": "Keep prompts under ~5 sentences. Long prompts bury the actual ask; split them into separate turns.",
     "specificity.mentions_file_or_line": "Name the file (and line, if you know it). \"Fix the parser\" costs a search; \"fix parse_file in jsonl_parser.py\" doesn't.",
-    "specificity.names_exact_function_class": "Reference exact identifiers in backticks — `score_and_attach`, `SessionSummary` — instead of describing them.",
+    "specificity.names_exact_function_class": "Reference exact identifiers in backticks, like `score_and_attach` or `SessionSummary`, instead of describing them.",
     "specificity.has_concrete_output_format": "State the shape you want back: a JSON schema, a function signature, a table, a diff.",
     "specificity.no_vague_quantifiers": "Replace \"clean it up a bit\" / \"some tests\" with a countable target: \"3 tests covering the empty, single, and 50+ cases\".",
     "context.references_prior_turn": "Anchor follow-ups to what came before (\"building on the parser you just wrote…\") so context isn't reconstructed from scratch.",
-    "context.provides_background_why": "Add one clause of why — \"so that re-imports stay idempotent\". Intent lets the model make better judgment calls.",
+    "context.provides_background_why": "Add one clause of why, such as \"so that re-imports stay idempotent\". Intent lets the model make better judgment calls.",
     "context.mentions_tech_stack": "Name the stack and version when it matters (Next.js 14 App Router, SQLAlchemy 2.0) to rule out wrong-idiom answers.",
-    "constraints.has_negative_constraint": "Say what NOT to do — \"don't touch the migrations\", \"no new dependencies\". Negative constraints prevent the most rework.",
+    "constraints.has_negative_constraint": "Say what NOT to do: \"don't touch the migrations\", \"no new dependencies\". Negative constraints prevent the most rework.",
     "constraints.specifies_scope_limit": "Bound the blast radius: \"only in backend/ingestion/\", \"leave the tests alone\".",
     "scope.single_task_focus": "One prompt, one task. Bundled asks get uneven attention and are harder to review.",
-    "scope.no_compound_and_also": "Split \"and also\" prompts into separate turns — each half gets full effort that way.",
+    "scope.no_compound_and_also": "Split \"and also\" prompts into separate turns; each half gets full effort that way.",
     "scope.task_size_appropriate": "Prompts over ~200 words usually contain 2-3 tasks. Break them up and sequence them.",
     "examples.has_code_block": "Paste the actual code, error, or stack trace in a fenced block rather than paraphrasing it.",
     "examples.has_before_after": "Show current vs. desired: \"currently returns None, should return an empty list\".",
     "examples.has_inline_example": "Give one concrete example of the input/output you have in mind (\"e.g. `parse('a,b')` -> `['a','b']`\").",
     "efficiency.concise_prompt": "Keep prompts under ~60 words. On the turns measured here, longer ones drew a median 14k output tokens against 3.3k for short ones.",
-    "efficiency.no_filler_phrases": "Drop \"can you\", \"please\", \"I was wondering\". Politeness reads as conversation and draws a conversational — and much longer — reply.",
+    "efficiency.no_filler_phrases": "Drop \"can you\", \"please\", \"I was wondering\". Politeness reads as conversation and draws a conversational, much longer, reply.",
     "efficiency.bounds_response_size": "Cap the reply: \"just the diff\", \"in three bullets\", \"no explanation\". Output is where the tokens actually go.",
     "efficiency.no_redundant_restatement": "Say each thing once. Restating the ask in different words pays for it twice and adds no information.",
 }
@@ -67,7 +67,7 @@ _ALL_SIGNAL_KEYS = [f"{factor}.{name}" for factor, sigs in SIGNALS.items() for n
 def grade(score: float | None) -> str:
     """Letter grade for an overall 0-10 score."""
     if score is None:
-        return "—"
+        return "–"
     if score >= 8.5:
         return "A"
     if score >= 7.5:
@@ -569,7 +569,7 @@ def render_markdown(report: dict) -> str:
     """Human-readable rendering, used by the MCP tool output."""
     t = report["totals"]
     lines = [
-        f"# Prompt report — `{report['project_path']}`",
+        f"# Prompt report: `{report['project_path']}`",
         "",
     ]
     if not t["prompts"]:
@@ -606,12 +606,12 @@ def render_markdown(report: dict) -> str:
     if report["recommendations"]:
         lines += ["", "## Do these next", ""]
         for i, rec in enumerate(report["recommendations"], 1):
-            lines.append(f"{i}. **{rec['missed_pct']}% of prompts miss this** — {rec['advice']}")
+            lines.append(f"{i}. **{rec['missed_pct']}% of prompts miss this**: {rec['advice']}")
 
     if report["worst_prompts"]:
         lines += ["", "## Lowest-scoring prompts", ""]
         for p in report["worst_prompts"]:
-            lines.append(f"- **{p['score']}/10** — \"{p['preview']}\"")
+            lines.append(f"- **{p['score']}/10**: \"{p['preview']}\"")
 
     econ = report.get("token_economics") or {}
     if econ.get("prompts_with_tokens"):
@@ -619,7 +619,7 @@ def render_markdown(report: dict) -> str:
             "",
             "## Token cost",
             "",
-            f"- **{econ['total_tokens']:,} tokens total** — "
+            f"- **{econ['total_tokens']:,} tokens total**: "
             f"{econ['context_tokens']:,} context (cache included), "
             f"{econ['output_tokens']:,} generated",
             f"- Median **{econ['median_output_per_prompt']:,} output tokens per prompt** "
@@ -627,7 +627,7 @@ def render_markdown(report: dict) -> str:
         ]
         if econ.get("output_per_file_changed"):
             lines.append(
-                f"- **{econ['output_per_file_changed']:,} output tokens per file changed** — "
+                f"- **{econ['output_per_file_changed']:,} output tokens per file changed**: "
                 "cost per unit of work, which is what makes a small fix and a "
                 "refactor comparable"
             )
@@ -636,7 +636,7 @@ def render_markdown(report: dict) -> str:
             for p in econ["most_expensive"]:
                 score = f"{p['score']}/10" if p["score"] is not None else "unscored"
                 lines.append(
-                    f"- **{p['output_tokens']:,} tokens** ({score}) — \"{p['preview']}\""
+                    f"- **{p['output_tokens']:,} tokens** ({score}): \"{p['preview']}\""
                 )
 
     lines += [

@@ -207,7 +207,7 @@ function errorHtml(message) {
 // Unit chosen from the rounded value, not the raw one: picking it first makes
 // 999,999 render as "1000.0k". 999,950 is where toFixed(1) rounds up to 1000.0.
 function compactNum(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "–";
   const abs = Math.abs(n);
   if (abs >= 999950) return `${(n / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
@@ -222,7 +222,7 @@ function reportHtml(report) {
         (report.project_path || "").split("/").filter(Boolean).pop() || "This folder",
       )}</div>
        <div class="empty">
-         No prompts recorded here yet. Use Claude Code in this folder — the report
+         No prompts recorded here yet. Use Claude Code in this folder. The report
          fills in automatically once a session ends.
        </div>
        <button data-cmd="sync">Import sessions now</button>`,
@@ -284,7 +284,7 @@ function reportHtml(report) {
 
   return shell(
     `<div class="score" style="color:${toneVar(report.overall)}">
-       ${report.overall === null ? "—" : report.overall.toFixed(1)}<span class="grade">${escapeHtml(report.grade)}</span>
+       ${report.overall === null ? "–" : report.overall.toFixed(1)}<span class="grade">${escapeHtml(report.grade)}</span>
      </div>
      <div class="sub">${trend}${t.scored_prompts} prompts · ${t.sessions} session${t.sessions === 1 ? "" : "s"}</div>
 
@@ -390,7 +390,7 @@ class ReportViewProvider {
       return;
     }
     this.statusBar.text = `$(graph) ${report.overall.toFixed(1)}`;
-    this.statusBar.tooltip = `Prompt.ly — ${report.grade}, ${report.totals.scored_prompts} prompts scored in this project`;
+    this.statusBar.tooltip = `Prompt.ly: ${report.grade}, ${report.totals.scored_prompts} prompts scored in this project`;
     this.statusBar.command = "promptly.focusView";
     this.statusBar.show();
   }
@@ -418,7 +418,7 @@ async function scoreSelection() {
 
     const weakest = Object.entries(result.factors).sort((a, b) => a[1] - b[1])[0];
     const choice = await vscode.window.showInformationMessage(
-      `Prompt score ${result.overall.toFixed(1)}/10 (${result.grade}) — weakest: ${weakest[0]} ${weakest[1].toFixed(1)}`,
+      `Prompt score ${result.overall.toFixed(1)}/10 (${result.grade}), weakest: ${weakest[0]} ${weakest[1].toFixed(1)}`,
       "Show details",
     );
     if (choice === "Show details") {

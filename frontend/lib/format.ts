@@ -7,7 +7,7 @@
  * `(n / 1e3).toFixed(1)` starts rounding up to "1000.0".
  */
 export function compact(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n === null || n === undefined || Number.isNaN(n)) return "–";
   const abs = Math.abs(n);
   if (abs >= 999_950) return `${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}k`;

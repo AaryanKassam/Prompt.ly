@@ -31,7 +31,7 @@ def main() -> int:
 
     if args.dry_run:
         for s in sessions:
-            print(f"  [{s.external_id[:8]}] {s.title or '(untitled)'} — {len(s.prompts)} prompts")
+            print(f"  [{s.external_id[:8]}] {s.title or '(untitled)'}: {len(s.prompts)} prompts")
         return 0
 
     init_db()
