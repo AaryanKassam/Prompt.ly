@@ -60,7 +60,6 @@ const config: Config = {
       },
       boxShadow: {
         raised: "0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset",
-        glow: "0 0 0 1px rgba(34,197,94,0.35), 0 0 24px -6px rgba(34,197,94,0.35)",
       },
       transitionTimingFunction: {
         // Expo.out — the easing this style pairs with.
