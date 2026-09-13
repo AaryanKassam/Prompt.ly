@@ -3,19 +3,22 @@ import { scoreBarClass } from "./ScoreBadge";
 /**
  * Factor-by-factor bars for a rubric score.
  *
- * Ordered by the rubric's own weights (clarity carries 22%, examples 6%) so
+ * Ordered by the rubric's own weights (clarity carries 21%, examples 3%) so
  * the factor that moves the overall score most is read first. Bars grow from
  * the left on mount; the animation is purely spatial and disabled under
  * prefers-reduced-motion by the global stylesheet.
  */
-const FACTORS: { key: string; weight: number; hint: string }[] = [
-  { key: "clarity", weight: 0.22, hint: "One clear ask, active voice, no hedging" },
-  { key: "specificity", weight: 0.18, hint: "Names files, identifiers and output shape" },
-  { key: "context", weight: 0.17, hint: "Background, intent and stack" },
+// `label` exists only because "model_fit" is the one factor key that is not
+// already a word; every other entry just repeats its key.
+const FACTORS: { key: string; weight: number; hint: string; label?: string }[] = [
+  { key: "clarity", weight: 0.21, hint: "One clear ask, active voice, no hedging" },
+  { key: "specificity", weight: 0.17, hint: "Names files, identifiers and output shape" },
+  { key: "context", weight: 0.16, hint: "Background, intent and stack" },
   { key: "efficiency", weight: 0.15, hint: "Few tokens spent, reply size bounded" },
-  { key: "constraints", weight: 0.13, hint: "What not to do, and where to stop" },
+  { key: "constraints", weight: 0.12, hint: "What not to do, and where to stop" },
   { key: "scope", weight: 0.09, hint: "One task, right size" },
-  { key: "examples", weight: 0.06, hint: "Code, before/after or a worked case" },
+  { key: "model_fit", weight: 0.07, label: "model fit", hint: "Right model for the size of the task" },
+  { key: "examples", weight: 0.03, hint: "Points at real code, an error or a case" },
 ];
 
 export default function ScoreBreakdown({
@@ -28,7 +31,7 @@ export default function ScoreBreakdown({
 }) {
   return (
     <ul className="space-y-2.5">
-      {FACTORS.map(({ key, weight, hint }, i) => {
+      {FACTORS.map(({ key, weight, hint, label }, i) => {
         const value = factors[key] ?? null;
         const pct = value === null ? 0 : (value / 10) * 100;
         const isWeak = highlight === key;
@@ -41,7 +44,7 @@ export default function ScoreBreakdown({
                   isWeak ? "font-medium text-content" : "text-content-muted"
                 }`}
               >
-                {key}
+                {label ?? key}
               </span>
               <span className="text-2xs text-content-faint tabular-nums">
                 {Math.round(weight * 100)}%

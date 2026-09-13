@@ -2,7 +2,7 @@
 
 Scores how effectively you prompt Claude, per project, then shows you how to improve.
 
-Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across seven factors (six for quality, one for token efficiency), and reports how you're doing in whichever project you're working on. It runs entirely locally.
+Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across eight factors (six for quality, one for token efficiency, one for whether a cheaper model would have done), and reports how you're doing in whichever project you're working on. It runs entirely locally.
 
 ![Prompt.ly dashboard](docs/dashboard.png)
 
@@ -109,9 +109,14 @@ Then the rest:
 
 | Command | Short | What |
 |---|---|---|
+| **`promptly help`** | | **Every command, grouped by when you'd reach for it** |
+| `promptly dashboard` | `ui` | Open the full dashboard in a browser (starts the servers if needed) |
 | `promptly report [path]` | `r` | Report for a folder, defaulting to the current one |
 | `promptly projects` | `p` | Every tracked folder |
 | `promptly watch` | `w` | Live report, refreshes as you work |
+| `promptly hide` | | Drop a turn from your score (see below) |
+| `promptly hidden` | | List the turns you've excluded |
+| `promptly unhide <id>` | | Put one back |
 | `promptly share` | | Redacted report safe to send to someone else |
 | `promptly doctor` | `check` | Check the setup and print the fix for anything broken |
 | `promptly sync` | | Import new sessions now |
@@ -119,7 +124,39 @@ Then the rest:
 | `promptly workspaces` | | Folders currently open in VS Code / Cursor |
 | `promptly reclassify` | | Re-label and rescore after an upgrade |
 
-`promptly help` prints all of these grouped by when you'd reach for them, and `--json` works on most of them for scripting.
+**`promptly help` is the one to remember.** It prints every command grouped by when you'd reach for it, with the short forms. Running `promptly` with no arguments prints the same thing, so there is nothing to memorise. `--json` works on most commands for scripting.
+
+### Opening the dashboard
+
+```bash
+promptly dashboard          # starts both servers if they aren't up, then opens the browser
+promptly dashboard --no-open   # start the servers, don't open a browser
+```
+
+The dashboard is the deep-dive surface: expandable factors, per-signal evidence, the playbook, and sharing. It runs on `localhost:3000` with the API on `localhost:8000`. To drive the servers directly instead:
+
+```bash
+./scripts/dev            # start both
+./scripts/dev backend    # API only
+./scripts/dev frontend   # dashboard only
+./scripts/dev stop       # stop both
+```
+
+`./scripts/dev` frees the ports before binding them, so it doubles as a restart.
+
+### Hiding a turn
+
+Not every prompt is work you want graded. Asking a clarifying question mid-task, pulling up a description, checking what a flag does: these are legitimate uses of the tool that score badly *as instructions*, because they aren't instructions. Left in, they drag the project average down and turn the score into something to game rather than something to read.
+
+```bash
+promptly hide                # list recent turns and how to pick one
+promptly hide --last         # exclude the most recent turn
+promptly hide 790f470d       # exclude one by id prefix
+promptly hidden              # everything currently excluded, with ids
+promptly unhide 790f470d     # put it back
+```
+
+Hiding **deletes the score row** rather than flagging it, so no average can pick up a stale number by accident. Unhiding rescores from the prompt text, which means a restored turn is graded by the current rubric rather than whichever one was live when it was first imported.
 
 The launcher re-execs under the repo venv, so it works from any directory regardless of which Python is active.
 
@@ -162,17 +199,28 @@ Only needed to capture claude.ai; Claude Code is covered by the log parser. See 
 
 ## How scoring works
 
-Every prompt is graded 0–10 across seven weighted factors, built from 23 structural signals:
+Every prompt is graded 0–10 across eight weighted factors, built from 26 structural signals:
 
 | Factor | Weight | Measures |
 |---|---|---|
-| Clarity | 22% | One unambiguous action, active voice, no hedging |
-| Specificity | 18% | Names files, identifiers, expected output shape |
-| Context | 17% | Background, intent, relevant stack |
+| Clarity | 21% | One unambiguous action, active voice, no hedging |
+| Specificity | 17% | Names files, identifiers, expected output shape |
+| Context | 16% | Background, intent, relevant stack |
 | **Efficiency** | **15%** | **Tokens spent, and whether the reply size is bounded** |
-| Constraints | 13% | What not to change, where to stop |
+| Constraints | 12% | What not to change, where to stop |
 | Scope | 9% | One task per request, sized to be reviewable |
-| Examples | 6% | Code, errors, or a concrete input/output case |
+| **Model fit** | **7%** | **Whether a cheaper model would have done the job** |
+| Examples | 3% | Points at real code, an error, or a concrete case |
+
+Factor scores are not linear in the signals met. A factor that meets nothing scores 1.0 rather than 0, and partial credit accrues on a mild curve (`fraction ** 0.90`), because a scale whose top third is unreachable measures nothing at the top. Both constants are calibrated on this machine's corpus, not guessed: at a floor of 2.0 the *lowest* score on 284 real prompts was 5.3, which trades an unusable top of the scale for an unusable bottom.
+
+**Long is not the same as bad.** Three separate signals used to penalise length, so one long prompt was marked down three times for a single attribute, and a detailed handoff document scored worse than a one-line "fix it". Prompts with headings, bullets, numbered steps or fenced code are now exempt from the two *rambling* signals (`clarity.sentence_count_focused`, `scope.task_size_appropriate`) while still paying the honest cost signal in `efficiency.concise_prompt`, because a long prompt does cost more to answer however tidy it is. On the corpus this moved a representative handoff document from 5.6 to 7.2 without moving `"do both"` off the floor.
+
+### Model fit
+
+The only factor that measures money rather than wording. Opus-class models bill $5/$25 per million input/output tokens against Sonnet's $2/$10, so answering a lookup on the heavy model is a 2.5x overspend that no amount of prompt polish recovers. The reverse is also a real cost: a genuinely hard task on a small model buys retries, and three attempts that miss cost more than one answer that lands.
+
+Both signals pass when the model is unknown, so scoring a draft you haven't sent is never penalised for a choice you haven't made. Task weight is a keyword and structure heuristic, not a measured outcome, which is why the factor is weighted below the validated quality factors.
 
 **The scorer is deterministic and runs offline.** No language model is involved in producing a score, that's the point. A rubric you own is defensible; a wrapper around someone else's judgement isn't.
 
@@ -218,20 +266,30 @@ Neither number is causal. A prompt that costs 60k tokens may have been doing 60k
 
 | Metric | Result |
 |---|---|
-| Weak mean | 4.17 / 10 |
-| Strong mean | 6.45 / 10 |
+| Weak mean | 5.40 / 10 |
+| Strong mean | 7.45 / 10 |
 | **Pairwise accuracy** | **20 / 20** |
-| **AUC** | **0.981** |
+| **AUC** | **0.985** |
 
 Those four figures come from a fixed fixture, so they are reproducible: `promptly validate` gives the same answer on your machine as on mine.
 
-It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts, so the rubric isn't grading its own homework. Across every project tracked on this machine, `promptly validate` reports **r = 0.298** on 156 scored prompts.
+It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts, so the rubric isn't grading its own homework. Across every project tracked on this machine, `promptly validate` reports **r = 0.142** on 284 scored prompts.
 
-That is still modest, worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem. Rescoring the same prompts under both weightings puts the six-factor rubric at r = 0.300 and the seven-factor one at **0.329**, so the efficiency factor earns its place, on a metric that still has a long way to go. (That pair is recomputed in memory over a slightly different prompt set, which is why it doesn't match the figure `validate` reads back from stored scores exactly.)
+That figure fell from the **0.298** reported here previously, and it is worth being precise about why, because only part of it is the rubric's doing:
 
-Against token cost specifically, the efficiency factor correlates **r = −0.212** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
+| Rubric | Corpus | r |
+|---|---|---|
+| Previous | 156 prompts | 0.298 |
+| Previous | 284 prompts (today) | 0.178 |
+| Current | 284 prompts (today) | 0.142 |
 
-> Every figure in this section that comes from *real prompts*, the correlations and the token totals above, is a snapshot of one machine's corpus on 2026-09-07 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
+Most of the drop is the corpus nearly doubling, which is what the caveat at the end of this section always warned would happen. The rubric change accounts for the remaining **0.036**: making the scorer fairer to long structured prompts cost a little outcome correlation on this corpus, while the paired benchmark went *up* (AUC 0.981 to 0.985). That is a trade made knowingly, and stated rather than buried.
+
+Either way the number is modest, which is worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and this metric still has a long way to go.
+
+Against token cost specifically, the efficiency factor correlates **r = −0.250** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
+
+> Every figure in this section that comes from *real prompts*, the correlations and the token totals above, is a snapshot of one machine's corpus on 2026-09-12 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
 
 ---
 
@@ -293,7 +351,7 @@ prompt.ly/
 │   ├── workspace.py      Detects the folder open in VS Code / Cursor
 │   ├── llm.py            The only language-model calls in the project
 │   ├── ingestion/        JSONL parser, classifier, attribution
-│   └── ml/               23 signals, rubric, MLP, trainer
+│   └── ml/               26 signals, rubric, MLP, trainer
 ├── frontend/             Next.js 14 + Tailwind dashboard
 ├── vscode-extension/     Sidebar, status bar, score-selection
 ├── mcp_server/           Claude desktop extension (5 tools)

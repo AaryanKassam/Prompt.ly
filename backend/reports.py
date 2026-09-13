@@ -31,7 +31,7 @@ RECOMMENDATIONS: dict[str, str] = {
     "clarity.single_imperative_verb": "Open with one clear action verb (\"Add…\", \"Fix…\", \"Refactor…\") instead of describing the situation first.",
     "clarity.no_passive_voice": "Say who does what: \"rename the handler\" rather than \"the handler should be renamed\".",
     "clarity.no_hedge_words": "Cut hedges like \"maybe\", \"I think\", \"sort of\". Commit to the request; you can always correct it afterwards.",
-    "clarity.sentence_count_le_5": "Keep prompts under ~5 sentences. Long prompts bury the actual ask; split them into separate turns.",
+    "clarity.sentence_count_focused": "Keep an unstructured ask under ~10 sentences. Past that, use headings or bullets: a structured brief reads as one task, a wall of prose reads as several.",
     "specificity.mentions_file_or_line": "Name the file (and line, if you know it). \"Fix the parser\" costs a search; \"fix parse_file in jsonl_parser.py\" doesn't.",
     "specificity.names_exact_function_class": "Reference exact identifiers in backticks, like `score_and_attach` or `SessionSummary`, instead of describing them.",
     "specificity.has_concrete_output_format": "State the shape you want back: a JSON schema, a function signature, a table, a diff.",
@@ -43,14 +43,17 @@ RECOMMENDATIONS: dict[str, str] = {
     "constraints.specifies_scope_limit": "Bound the blast radius: \"only in backend/ingestion/\", \"leave the tests alone\".",
     "scope.single_task_focus": "One prompt, one task. Bundled asks get uneven attention and are harder to review.",
     "scope.no_compound_and_also": "Split \"and also\" prompts into separate turns; each half gets full effort that way.",
-    "scope.task_size_appropriate": "Prompts over ~200 words usually contain 2-3 tasks. Break them up and sequence them.",
-    "examples.has_code_block": "Paste the actual code, error, or stack trace in a fenced block rather than paraphrasing it.",
-    "examples.has_before_after": "Show current vs. desired: \"currently returns None, should return an empty list\".",
+    "scope.task_size_appropriate": "Unstructured prompts over ~350 words usually contain 2-3 tasks. Break them up, or give the brief headings and bullets so the parts are visible.",
+    "examples.grounds_in_concrete": "Point at the thing: name the file, backtick the identifier, or paste the snippet. Any of the three works; you don't have to copy code the agent can open itself.",
+    "examples.has_before_after": "Show current vs. desired: \"currently returns None, should return an empty list\", or just \"None -> []\".",
+    "examples.grounds_in_error": "Paste the actual error and stack trace. This is the one thing the agent cannot look up for itself, and it turns a search into a fix.",
     "examples.has_inline_example": "Give one concrete example of the input/output you have in mind (\"e.g. `parse('a,b')` -> `['a','b']`\").",
     "efficiency.concise_prompt": "Keep prompts under ~60 words. On the turns measured here, longer ones drew a median 14k output tokens against 3.3k for short ones.",
     "efficiency.no_filler_phrases": "Drop \"can you\", \"please\", \"I was wondering\". Politeness reads as conversation and draws a conversational, much longer, reply.",
     "efficiency.bounds_response_size": "Cap the reply: \"just the diff\", \"in three bullets\", \"no explanation\". Output is where the tokens actually go.",
     "efficiency.no_redundant_restatement": "Say each thing once. Restating the ask in different words pays for it twice and adds no information.",
+    "model_fit.model_not_overpowered": "This one looked like a lookup, and it ran on an Opus-class model. Sonnet answers recall and navigation just as well for 40% of the price.",
+    "model_fit.model_not_underpowered": "This was design or diagnostic work on a small model. Retries cost more than one answer from a larger model that lands first time.",
 }
 
 # Output tokens per prompt, from the corpus these thresholds were calibrated on.
@@ -59,7 +62,8 @@ _COST_BANDS = ((3000, "lean"), (10000, "typical"))
 
 # Bumped when build_report's payload shape changes, so stored caches rebuild.
 # 2: added token_economics.  3: factors reordered by descending weight.
-SCHEMA_VERSION = 3
+# 4: added the model_fit factor, reworked `examples`, and excluded hidden turns.
+SCHEMA_VERSION = 4
 
 _ALL_SIGNAL_KEYS = [f"{factor}.{name}" for factor, sigs in SIGNALS.items() for name in sigs]
 
@@ -144,7 +148,9 @@ def collect(db: DbSession, project_path: str) -> ReportInputs:
     for s in candidate_sessions:
         # Only turns a person actually typed belong in a report.
         prompts.extend(
-            p for p in s.prompts if (p.kind or KIND_USER) == KIND_USER and belongs(p)
+            p
+            for p in s.prompts
+            if (p.kind or KIND_USER) == KIND_USER and not p.hidden and belongs(p)
         )
     prompts.sort(key=lambda p: _sort_key(p.timestamp))
     sessions = [s for s in candidate_sessions if any(p.session_id == s.id for p in prompts)]
@@ -417,7 +423,7 @@ SIGNAL_LABELS: dict[str, str] = {
     "single_imperative_verb": "opens with one action verb",
     "no_passive_voice": "active voice",
     "no_hedge_words": "no hedging",
-    "sentence_count_le_5": "5 sentences or fewer",
+    "sentence_count_focused": "focused or structured",
     "mentions_file_or_line": "names a file or line",
     "names_exact_function_class": "names exact identifiers",
     "has_concrete_output_format": "states output format",
@@ -430,13 +436,16 @@ SIGNAL_LABELS: dict[str, str] = {
     "single_task_focus": "one task",
     "no_compound_and_also": "no compound asks",
     "task_size_appropriate": "right size",
-    "has_code_block": "includes code",
+    "grounds_in_concrete": "points at real code",
     "has_before_after": "shows before/after",
+    "grounds_in_error": "pastes the error",
     "has_inline_example": "gives an example",
     "concise_prompt": "60 words or fewer",
     "no_filler_phrases": "no conversational filler",
     "bounds_response_size": "caps the reply size",
     "no_redundant_restatement": "says each thing once",
+    "model_not_overpowered": "model not overkill",
+    "model_not_underpowered": "model strong enough",
 }
 
 

@@ -15,14 +15,17 @@ import { CheckIcon, ChevronRightIcon } from "./icons";
  * the last ten prompts passed or failed each signal in that factor, so the
  * number is traceable to specific things the user wrote.
  */
-const FACTORS: { key: string; weight: number }[] = [
-  { key: "clarity", weight: 0.22 },
-  { key: "specificity", weight: 0.18 },
-  { key: "context", weight: 0.17 },
+// `label` exists only because "model_fit" is the one factor key that is not
+// already a word; every other entry just repeats its key.
+const FACTORS: { key: string; weight: number; label?: string }[] = [
+  { key: "clarity", weight: 0.21 },
+  { key: "specificity", weight: 0.17 },
+  { key: "context", weight: 0.16 },
   { key: "efficiency", weight: 0.15 },
-  { key: "constraints", weight: 0.13 },
+  { key: "constraints", weight: 0.12 },
   { key: "scope", weight: 0.09 },
-  { key: "examples", weight: 0.06 },
+  { key: "model_fit", weight: 0.07, label: "model fit" },
+  { key: "examples", weight: 0.03 },
 ];
 
 function Evidence({ factor, path }: { factor: string; path?: string }) {
@@ -128,7 +131,7 @@ export default function ExpandableFactors({
 
   return (
     <ul className="divide-y divide-line">
-      {FACTORS.map(({ key, weight }) => {
+      {FACTORS.map(({ key, weight, label }) => {
         const value = factors[key] ?? null;
         const pct = value === null ? 0 : (value / 10) * 100;
         const isOpen = open === key;
@@ -153,7 +156,7 @@ export default function ExpandableFactors({
                     highlight === key ? "font-medium text-content" : "text-content-muted"
                   }`}
                 >
-                  {key}
+                  {label ?? key}
                 </span>
                 <span className="text-2xs tabular-nums text-content-faint">
                   {Math.round(weight * 100)}%

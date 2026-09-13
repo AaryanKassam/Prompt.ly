@@ -28,18 +28,20 @@ def score_and_attach(db: DbSession, prompt: Prompt) -> Score | None:
 
     Non-user turns are left unscored: skill files and command echoes are long
     and well-formed, so scoring them pollutes averages and dominates the
-    "best prompt" rankings with text the user never wrote.
+    "best prompt" rankings with text the user never wrote. Turns the user has
+    hidden are dropped the same way, so hiding one takes it out of every
+    average rather than merely greying it out in the UI.
     """
     if prompt.kind is None:
         prompt.kind = classify(prompt.text)
-    if prompt.kind != KIND_USER:
+    if prompt.kind != KIND_USER or prompt.hidden:
         if prompt.score is not None:
             db.delete(prompt.score)
             db.flush()
         return None
 
     # Score the user's own words, not the wrapper blocks around them.
-    result = score_text(clean(prompt.text))
+    result = score_text(clean(prompt.text), prompt.model)
     if prompt.score is not None:
         db.delete(prompt.score)
         db.flush()

@@ -75,14 +75,20 @@ def active_model_info() -> dict | None:
     return active[1] if active else None
 
 
-def score(text: str) -> RubricScore:
-    """Score a prompt, blending the MLP in when available."""
-    rubric = score_prompt(text)
+def score(text: str, model: str | None = None) -> RubricScore:
+    """Score a prompt, blending the MLP in when available.
+
+    `model` names the model that answered the turn and feeds the `model_fit`
+    factor; omit it to score a draft that has not been sent.
+    """
+    rubric = score_prompt(text, model)
     active = _load_active_model()
     if not active or not (text or "").strip():
         return rubric
 
-    model, _meta = active
+    # Named `mlp` rather than `model`: the `model` parameter is the Claude model
+    # that answered the turn, and signal_vector below needs that, not this.
+    mlp, _meta = active
     try:
         import numpy as np
 
@@ -90,9 +96,9 @@ def score(text: str) -> RubricScore:
         from .model import predict_scores
 
         feat = np.concatenate(
-            [embed_one(text), np.array(signal_vector(text), dtype="float32")]
+            [embed_one(text), np.array(signal_vector(text, model), dtype="float32")]
         ).reshape(1, -1)
-        mlp_overall = predict_scores(model, feat)[0]
+        mlp_overall = predict_scores(mlp, feat)[0]
         blended = MLP_WEIGHT * mlp_overall + (1 - MLP_WEIGHT) * rubric.overall
         rubric.overall = max(0.0, min(10.0, blended))
         rubric.model_phase = 2

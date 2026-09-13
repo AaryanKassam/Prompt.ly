@@ -11,6 +11,8 @@ command, so there is nothing to remember to run.
     promptly projects               # every tracked folder
     promptly sync                   # import logs only
     promptly watch                  # live view, refreshes as you work
+    promptly hide --last            # drop a turn from your score
+    promptly dashboard              # open the full dashboard in a browser
     promptly install-hook           # auto-sync after every Claude Code session
 
 `--json` is available on report/projects/score for scripting and is what the
@@ -31,7 +33,10 @@ from rich.table import Table
 from rich.text import Text
 
 from .db import SessionLocal, init_db
+from .ingestion.classify import KIND_USER
+from .ingestion.store import score_and_attach
 from .ml.scorer import active_model_info, score as score_text
+from .models import Prompt, Session as DbSessionRow
 from .reports import (
     RECOMMENDATIONS,
     cached_report,
@@ -42,6 +47,9 @@ from .reports import (
 from .workspace import detect_active_workspace, list_open_workspaces
 
 console = Console()
+
+# Only `model_fit` needs an entry: every other factor key is already a word.
+FACTOR_LABELS = {"model_fit": "model fit"}
 
 # Score -> colour, matching the dashboard's scale exactly so a 6.4 looks the
 # same in the terminal, the sidebar and the browser.
@@ -128,7 +136,10 @@ def render_report(payload: dict, compact: bool = False) -> Group:
     for factor, value in payload["factors"].items():
         if value is None:
             continue
-        label = Text(factor, style="bold white" if factor == payload["weakest_factor"] else "grey62")
+        label = Text(
+            FACTOR_LABELS.get(factor, factor),
+            style="bold white" if factor == payload["weakest_factor"] else "grey62",
+        )
         factors.add_row(label, bar(value), Text(f"{value:.1f}", style=tone(value)))
 
     blocks: list = [
@@ -632,15 +643,25 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     db = SessionLocal()
     try:
         scored = db.scalar(
-            select(func.count(Prompt.id)).where(Prompt.kind == KIND_USER)
+            select(func.count(Prompt.id)).where(
+                Prompt.kind == KIND_USER, Prompt.hidden.is_(False)
+            )
+        ) or 0
+        hidden = db.scalar(
+            select(func.count(Prompt.id)).where(
+                Prompt.kind == KIND_USER, Prompt.hidden.is_(True)
+            )
         ) or 0
         total = db.scalar(select(func.count(Prompt.id))) or 0
     finally:
         db.close()
+    # `scored` counts what the averages actually run on, so hidden turns have to
+    # come out of it; reporting them separately keeps the two numbers reconcilable.
+    detail = f"{scored} real prompts ({total - scored - hidden} transcript rows excluded"
+    detail += f", {hidden} hidden by you)" if hidden else ")"
     checks.append((
         "Database", total > 0,
-        f"{scored} real prompts ({total - scored} transcript rows excluded)" if total
-        else "empty; run `promptly sync`",
+        detail if total else "empty; run `promptly sync`",
     ))
 
     # .env is what makes one key reach every surface.
@@ -838,6 +859,210 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# Hiding turns
+#
+# Not every prompt is work you want graded. Asking a clarifying question mid-task,
+# pulling up a description, checking what a flag does — these are legitimate uses
+# of the tool that score badly as *instructions*, because they aren't instructions.
+# Leaving them in drags the project average down and, worse, makes the score
+# something to game rather than something to read.
+#
+# Hiding drops the Score row outright rather than flagging it, so no aggregate can
+# pick up a stale number by accident. Unhiding rescores from the text.
+
+
+def _recent_prompts(db, path: str | None, limit: int, hidden: bool = False) -> list:
+    """Most recent real prompts, newest first, optionally the hidden ones."""
+    from sqlalchemy import select
+
+    q = (
+        select(Prompt)
+        .join(DbSessionRow, Prompt.session_id == DbSessionRow.id)
+        .where(Prompt.kind == KIND_USER, Prompt.hidden.is_(hidden))
+        .order_by(Prompt.timestamp.desc().nullslast())
+        .limit(limit)
+    )
+    if path:
+        norm = path.rstrip("/")
+        q = q.where(
+            (Prompt.project_path == norm) | (DbSessionRow.project_path == norm)
+        )
+    return list(db.scalars(q))
+
+
+def _prompt_table(rows: list, title: str) -> Table:
+    t = Table(box=None, pad_edge=False, show_header=True, header_style="grey50", title=title,
+              title_justify="left", title_style="bold")
+    t.add_column("#", width=3, justify="right", style="grey37")
+    t.add_column("score", width=5, justify="right")
+    t.add_column("when", width=11, style="grey50")
+    t.add_column("prompt")
+    for i, p in enumerate(rows, 1):
+        score = p.score.overall if p.score else None
+        when = p.timestamp.strftime("%b %d %H:%M") if p.timestamp else "-"
+        preview = " ".join((p.text or "").split())[:70]
+        t.add_row(
+            str(i),
+            Text(f"{score:.1f}" if score is not None else "-", style=tone(score or 0)),
+            when,
+            Text(preview, style="white"),
+        )
+    return t
+
+
+def _resolve_targets(db, args, hidden: bool) -> list:
+    """Turn --last / -n / an id prefix into the prompt rows to act on."""
+    path = None if args.all_projects else resolve_path(getattr(args, "path", None))
+    if args.id:
+        from sqlalchemy import select
+
+        matches = list(
+            db.scalars(select(Prompt).where(Prompt.id.startswith(args.id)))
+        )
+        return matches
+    pool = _recent_prompts(db, path, max(args.number, 1), hidden=hidden)
+    if args.last:
+        return pool[:1]
+    return pool[: args.number] if args.number else pool
+
+
+def _set_hidden(args, hidden: bool) -> int:
+    verb = "Hidden" if hidden else "Restored"
+    db = SessionLocal()
+    try:
+        if args.id:
+            targets = _resolve_targets(db, args, hidden=not hidden)
+            if not targets:
+                console.print(f"[red]No prompt with id starting {args.id!r}.[/red]")
+                return 1
+            if len(targets) > 1:
+                console.print(f"[red]{args.id!r} matches {len(targets)} prompts. Use more characters.[/red]")
+                return 1
+        elif args.last:
+            targets = _resolve_targets(db, args, hidden=not hidden)[:1]
+            if not targets:
+                console.print("[grey62]Nothing to change here.[/grey62]")
+                return 0
+        else:
+            # No target named: show the candidates and let the user pick by index.
+            pool = _recent_prompts(db, None if args.all_projects else resolve_path(args.path),
+                                   max(args.number, 10), hidden=not hidden)
+            if not pool:
+                console.print("[grey62]Nothing to change here.[/grey62]")
+                return 0
+            console.print()
+            console.print(_prompt_table(pool, "which turn?"))
+            console.print(
+                f"\n  [grey37]promptly {'hide' if hidden else 'unhide'} --last"
+                f"      the top one[/grey37]"
+            )
+            console.print(
+                f"  [grey37]promptly {'hide' if hidden else 'unhide'} <id>"
+                f"         by id prefix (promptly hidden shows ids)[/grey37]\n"
+            )
+            return 0
+
+        for p in targets:
+            p.hidden = hidden
+            score_and_attach(db, p)
+        db.commit()
+        it = "it" if len(targets) == 1 else "them"
+        tail = (
+            f"Scores and averages exclude {it} from now on."
+            if hidden
+            else f"Rescored under the current rubric; averages count {it} again."
+        )
+        console.print(
+            f"\n  [green]{verb} {len(targets)} turn{'s' if len(targets) != 1 else ''}.[/green]"
+            f"  [grey50]{tail}[/grey50]\n"
+        )
+        return 0
+    finally:
+        db.close()
+
+
+def cmd_hide(args: argparse.Namespace) -> int:
+    return _set_hidden(args, hidden=True)
+
+
+def cmd_unhide(args: argparse.Namespace) -> int:
+    return _set_hidden(args, hidden=False)
+
+
+def cmd_hidden(args: argparse.Namespace) -> int:
+    """Everything currently excluded, with the ids needed to restore it."""
+    db = SessionLocal()
+    try:
+        path = None if args.all_projects else resolve_path(args.path)
+        rows = _recent_prompts(db, path, 200, hidden=True)
+        if args.json:
+            print(json.dumps([
+                {"id": p.id, "text": p.text, "timestamp": p.timestamp} for p in rows
+            ], default=str))
+            return 0
+        if not rows:
+            console.print("\n  [grey62]No hidden turns."
+                          " Use [white]promptly hide --last[/white] to exclude one.[/grey62]\n")
+            return 0
+        t = Table(box=None, pad_edge=False, show_header=True, header_style="grey50")
+        t.add_column("id", width=10, style="grey37")
+        t.add_column("when", width=11, style="grey50")
+        t.add_column("prompt")
+        for p in rows:
+            when = p.timestamp.strftime("%b %d %H:%M") if p.timestamp else "-"
+            t.add_row(p.id[:8], when, Text(" ".join((p.text or "").split())[:70], style="white"))
+        console.print()
+        console.print(Panel(t, title=f"[bold]hidden[/bold] [grey50]{len(rows)}[/grey50]",
+                            border_style="grey30", padding=(0, 1)))
+        console.print("\n  [grey37]promptly unhide <id>   put one back[/grey37]\n")
+        return 0
+    finally:
+        db.close()
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Start both servers if they aren't up, then open the dashboard.
+
+    The dev script is already idempotent (it frees the ports first), so this is
+    a thin wrapper whose real job is saving the user from remembering where the
+    repo lives and which port is which.
+    """
+    import subprocess
+    import urllib.error
+    import urllib.request
+    import webbrowser
+
+    url = "http://localhost:3000"
+
+    def up() -> bool:
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except (urllib.error.URLError, OSError):
+            return False
+
+    if up():
+        console.print(f"\n  [green]Dashboard already running.[/green]  [grey50]{url}[/grey50]\n")
+    else:
+        script = Path(__file__).resolve().parent.parent / "scripts" / "dev"
+        if not script.exists():
+            console.print(f"[red]Can't find {script}. Run ./scripts/dev from the repo.[/red]")
+            return 1
+        console.print("\n  [grey62]Starting servers…[/grey62]")
+        proc = subprocess.run([str(script)], capture_output=not args.verbose, text=True)
+        if proc.returncode != 0:
+            console.print("[red]Servers failed to start.[/red]")
+            if proc.stdout:
+                console.print(f"[grey50]{proc.stdout[-800:]}[/grey50]")
+            return 1
+        console.print(f"  [green]Dashboard ready.[/green]  [grey50]{url}[/grey50]\n")
+
+    if not args.no_open:
+        webbrowser.open(url)
+    return 0
+
+
 def cmd_workspaces(args: argparse.Namespace) -> int:
     workspaces = list_open_workspaces()
     if args.json:
@@ -865,8 +1090,15 @@ COMMAND_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
     ]),
     ("How you're doing", [
         ("report [path]", "r", "Report for a folder (default: this one)"),
+        ("dashboard", "ui", "Open the full dashboard in a browser"),
         ("projects", "p", "Every tracked folder"),
         ("watch", "w", "Live report, refreshes as you work"),
+    ]),
+    ("Turns you don't want graded", [
+        ("hide --last", "", "Drop the last turn from your score"),
+        ("hide <id>", "", "Drop a specific turn"),
+        ("hidden", "", "List what you've excluded"),
+        ("unhide <id>", "", "Put one back"),
     ]),
     ("Sharing", [
         ("share", "", "Redacted report, safe to send"),
@@ -978,6 +1210,36 @@ def build_parser() -> argparse.ArgumentParser:
     p_val = sub.add_parser("validate", help="measure scorer separation on a benchmark")
     p_val.add_argument("--json", action="store_true")
     p_val.set_defaults(func=cmd_validate)
+
+    def add_hide_args(sp):
+        sp.add_argument("id", nargs="?", help="prompt id (or a unique prefix)")
+        sp.add_argument("--last", action="store_true", help="the most recent turn")
+        sp.add_argument("-n", "--number", type=int, default=0, help="the N most recent turns")
+        sp.add_argument("--path", help="folder (defaults to the current directory)")
+        sp.add_argument("--all-projects", action="store_true", help="don't filter by folder")
+
+    p_hide = sub.add_parser(
+        "hide", help="exclude a turn from your score (questions, lookups, detours)"
+    )
+    add_hide_args(p_hide)
+    p_hide.set_defaults(func=cmd_hide)
+
+    p_unhide = sub.add_parser("unhide", help="put a hidden turn back into your score")
+    add_hide_args(p_unhide)
+    p_unhide.set_defaults(func=cmd_unhide)
+
+    p_hidden = sub.add_parser("hidden", help="list the turns you've excluded")
+    p_hidden.add_argument("path", nargs="?")
+    p_hidden.add_argument("--all-projects", action="store_true")
+    p_hidden.add_argument("--json", action="store_true")
+    p_hidden.set_defaults(func=cmd_hidden)
+
+    p_dash = sub.add_parser(
+        "dashboard", aliases=["ui", "open"], help="open the full dashboard in a browser"
+    )
+    p_dash.add_argument("--no-open", action="store_true", help="start the servers but don't open a browser")
+    p_dash.add_argument("-v", "--verbose", action="store_true", help="show server startup output")
+    p_dash.set_defaults(func=cmd_dashboard)
 
     p_help = sub.add_parser("help", help="list every command")
     p_help.set_defaults(func=cmd_help)

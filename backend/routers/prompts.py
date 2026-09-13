@@ -2,6 +2,7 @@
 
   GET   /api/prompts/{id}             -> full prompt with score breakdown + signals
   PATCH /api/prompts/{id}/annotation  -> upsert user note + tags
+  PATCH /api/prompts/{id}/hidden      -> exclude/restore a turn in every average
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session as DbSession
 
 from ..db import get_session
+from ..ingestion.store import score_and_attach
 from ..ml.features import extract_signals
 from ..models import Annotation, Prompt
 
@@ -22,6 +24,10 @@ router = APIRouter(prefix="/api/prompts", tags=["prompts"])
 class AnnotationIn(BaseModel):
     note: Optional[str] = None
     tags: Optional[list[str]] = None
+
+
+class HiddenIn(BaseModel):
+    hidden: bool
 
 
 def _score_block(prompt: Prompt) -> Optional[dict]:
@@ -86,6 +92,31 @@ def upsert_annotation(
     db.add(ann)
     db.commit()
     return {"note": ann.note, "tags": ann.tags or []}
+
+
+@router.patch("/{prompt_id}/hidden")
+def set_hidden(
+    prompt_id: str, payload: HiddenIn, db: DbSession = Depends(get_session)
+) -> dict:
+    """Exclude a turn from every score and average, or put it back.
+
+    Hiding drops the Score row rather than flagging it, so there is no stale
+    number for an aggregate to pick up by accident. Unhiding rescores from the
+    prompt text, which also means a restored turn is graded by the current
+    rubric rather than whichever one was live when it was first imported.
+    """
+    p = db.get(Prompt, prompt_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="prompt not found")
+
+    p.hidden = payload.hidden
+    score = score_and_attach(db, p)
+    db.commit()
+    return {
+        "id": p.id,
+        "hidden": p.hidden,
+        "overall": round(score.overall, 2) if score else None,
+    }
 
 
 @router.get("/{prompt_id}/improve")

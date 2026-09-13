@@ -128,8 +128,33 @@ def no_hedge_words(text: str) -> bool:
     return not _contains_any(text.lower(), _HEDGE_WORDS)
 
 
-def sentence_count_le_5(text: str) -> bool:
-    return 1 <= len(_sentences(text)) <= 5
+def is_structured(text: str) -> bool:
+    """True when a long prompt is organised rather than rambling.
+
+    Headings, bullets, numbered steps and fenced code are what separate a
+    deliberate handoff document from a stream of consciousness. Length alone
+    used to fail three separate signals, so one long-but-organised prompt was
+    punished three times for a single attribute. The length signals below
+    exempt structured text; `efficiency.concise_prompt` deliberately does not,
+    because a long prompt genuinely does cost more to answer however tidy it is.
+    """
+    if "```" in text:
+        return True
+    lines = text.splitlines()
+    listed = sum(1 for ln in lines if re.match(r"\s*([-*+]|\d+[.)])\s+\S", ln))
+    if listed >= 2:
+        return True
+    return bool(re.search(r"^\s*#{1,6}\s+\S|^\s*\*\*[^*]+\*\*\s*$", text, re.MULTILINE))
+
+
+_FOCUSED_SENTENCE_LIMIT = 10  # was 5: a well-formed ask is routinely 6-10 sentences
+
+
+def sentence_count_focused(text: str) -> bool:
+    count = len(_sentences(text))
+    if count < 1:
+        return False
+    return count <= _FOCUSED_SENTENCE_LIMIT or is_structured(text)
 
 
 # --- specificity ----------------------------------------------------------
@@ -208,26 +233,150 @@ def no_compound_and_also(text: str) -> bool:
     return low.count(" and ") <= 2
 
 
+_TASK_WORD_LIMIT = 350  # was 200, which failed most genuine specifications
+
+
 def task_size_appropriate(text: str) -> bool:
-    # Very long single prompts tend to cram too much in at once.
-    return len(_words(text)) <= 200
+    # Very long *unstructured* prompts tend to cram too much in at once. A
+    # structured brief of the same length is one task described properly.
+    return len(_words(text)) <= _TASK_WORD_LIMIT or is_structured(text)
 
 
 # --- examples -------------------------------------------------------------
+#
+# Renamed in spirit from "did you paste code" to "is the request grounded in
+# something concrete". Pasting a block is one way to ground a request; pointing
+# at the file is another, and for an agent that can open the file itself the two
+# are equivalent. Demanding the paste made the user do the agent's job, and it
+# showed: `examples` averaged 0.8/10 across the corpus, which is not a rubric
+# measuring a habit, it is a rubric nobody can pass.
+#
+# The one case where a paste is genuinely irreplaceable is an error: the exact
+# message and stack trace are not in the repository, so `grounds_in_error`
+# rewards that specifically rather than rewarding code blocks in general.
+
+_ERROR_MARKERS = (
+    "traceback", "stack trace", "stacktrace", "exception", "error:", "errno",
+    "failed with", "segfault", "panic:", "assertionerror", "typeerror",
+    "valueerror", "syntaxerror", "referenceerror", "cannot read", "undefined is not",
+    "exit code", "non-zero exit", "npm err", "fatal:",
+)
 
 
-def has_code_block(text: str) -> bool:
-    return "```" in text or bool(re.search(r"\n\s{4,}\S", text))
+def grounds_in_concrete(text: str) -> bool:
+    """Shows the thing, or says exactly where it lives. Either grounds the ask."""
+    if "```" in text or re.search(r"\n\s{4,}\S", text):
+        return True
+    if "`" in text:                       # inline identifier or path
+        return True
+    return mentions_file_or_line(text)
 
 
 def has_before_after(text: str) -> bool:
     low = text.lower()
-    return ("currently" in low and ("want" in low or "should" in low)) or "instead of" in low
+    if "instead of" in low or "rather than" in low:
+        return True
+    if re.search(r"\b(currently|right now|today|at the moment|used to)\b", low) and re.search(
+        r"\b(want|should|expect|need|instead|now)\b", low
+    ):
+        return True
+    # "X -> Y" is the compact form of the same idea.
+    return bool(re.search(r"\S\s*(->|→|=>)\s*\S", text))
+
+
+def grounds_in_error(text: str) -> bool:
+    """Pastes the actual failure. The one thing the agent cannot look up itself."""
+    return _contains_any(text.lower(), _ERROR_MARKERS)
 
 
 def has_inline_example(text: str) -> bool:
     low = text.lower()
-    return "e.g." in low or "for example" in low or "like this" in low or "such as" in low
+    return any(
+        m in low
+        for m in ("e.g.", "for example", "like this", "such as", "for instance", "example:")
+    )
+
+
+# --- model fit (was a cheaper model enough?) -------------------------------
+#
+# Not a property of the prompt's wording but of the pairing between the task and
+# the model that answered it. Opus costs $5/$25 per million tokens against
+# Sonnet's $2/$10, so running a lookup on the heavy model is a 2.5x overspend
+# that no amount of prompt polish recovers. The reverse is also a real cost:
+# a genuinely hard task on a small model buys retries, and three Haiku attempts
+# cost more than one Sonnet answer that lands.
+#
+# Both signals pass when the model is unknown, so scoring a draft you have not
+# sent yet is never penalised for a choice you have not made.
+
+_HEAVY_MODEL_MARKERS = ("opus", "fable", "mythos")
+_MID_MODEL_MARKERS = ("sonnet",)
+_LIGHT_MODEL_MARKERS = ("haiku",)
+
+# Asks that a small model answers as well as a large one: recall, navigation,
+# formatting, and single-step edits with no design content.
+_LIGHT_TASK_MARKERS = (
+    "what is", "what's", "what does", "where is", "where are", "which file",
+    "is there", "does it", "do i", "how do i", "list the", "list all", "show me",
+    "show the", "print the", "find the", "look up", "remind me", "explain what",
+    "summarize", "summarise", "rename", "typo", "spelling", "format this",
+    "add a comment", "what are the", "tell me", "confirm", "check if", "read the",
+)
+
+# Asks with genuine design or diagnostic content, where the larger model earns it.
+_HEAVY_TASK_MARKERS = (
+    "architecture", "refactor", "redesign", "design a", "migrate", "optimi",
+    "debug", "why does", "why is", "why are", "race condition", "deadlock",
+    "trade-off", "tradeoff", "security", "concurren", "algorithm", "schema",
+    "end to end", "end-to-end", "from scratch", "rewrite", "plan the",
+    "across the", "throughout the", "implement", "build a",
+)
+
+
+def _model_tier(model: str | None) -> int:
+    """3 = Opus-class, 2 = Sonnet-class, 1 = Haiku-class, 0 = unknown."""
+    low = (model or "").lower()
+    if not low:
+        return 0
+    if any(m in low for m in _HEAVY_MODEL_MARKERS):
+        return 3
+    if any(m in low for m in _MID_MODEL_MARKERS):
+        return 2
+    if any(m in low for m in _LIGHT_MODEL_MARKERS):
+        return 1
+    return 0
+
+
+def _task_weight(text: str) -> int:
+    """3 = needs the big model, 2 = ordinary work, 1 = a cheaper model would do."""
+    low = (text or "").lower()
+    words = len(_words(text))
+    heavy = sum(1 for m in _HEAVY_TASK_MARKERS if m in low)
+    light = sum(1 for m in _LIGHT_TASK_MARKERS if m in low)
+
+    if heavy or words > 120 or is_structured(text):
+        return 3
+    if light and words <= 40:
+        return 1
+    if words <= 12 and not heavy:
+        return 1
+    return 2
+
+
+def model_not_overpowered(text: str, model: str | None = None) -> bool:
+    """False when an Opus-class model answered something Sonnet would have nailed."""
+    tier = _model_tier(model)
+    if tier == 0:
+        return True
+    return not (tier == 3 and _task_weight(text) == 1)
+
+
+def model_not_underpowered(text: str, model: str | None = None) -> bool:
+    """False when a Haiku-class model got work that will cost retries."""
+    tier = _model_tier(model)
+    if tier == 0:
+        return True
+    return not (tier == 1 and _task_weight(text) == 3)
 
 
 # --- efficiency (token cost) ----------------------------------------------
@@ -280,7 +429,7 @@ SIGNALS: dict[str, dict] = {
         "single_imperative_verb": single_imperative_verb,
         "no_passive_voice": no_passive_voice,
         "no_hedge_words": no_hedge_words,
-        "sentence_count_le_5": sentence_count_le_5,
+        "sentence_count_focused": sentence_count_focused,
     },
     "specificity": {
         "mentions_file_or_line": mentions_file_or_line,
@@ -303,8 +452,9 @@ SIGNALS: dict[str, dict] = {
         "task_size_appropriate": task_size_appropriate,
     },
     "examples": {
-        "has_code_block": has_code_block,
+        "grounds_in_concrete": grounds_in_concrete,
         "has_before_after": has_before_after,
+        "grounds_in_error": grounds_in_error,
         "has_inline_example": has_inline_example,
     },
     "efficiency": {
@@ -313,14 +463,29 @@ SIGNALS: dict[str, dict] = {
         "bounds_response_size": bounds_response_size,
         "no_redundant_restatement": no_redundant_restatement,
     },
+    "model_fit": {
+        "model_not_overpowered": model_not_overpowered,
+        "model_not_underpowered": model_not_underpowered,
+    },
 }
 
+# Signals that also need to know which model answered the turn. Everything else
+# is a pure function of the text, so the registry stays callable with one arg.
+MODEL_AWARE: frozenset[str] = frozenset({"model_not_overpowered", "model_not_underpowered"})
 
-def extract_signals(text: str) -> dict[str, dict[str, bool]]:
-    """Run every signal extractor; return {factor: {signal: bool}}."""
+
+def extract_signals(text: str, model: str | None = None) -> dict[str, dict[str, bool]]:
+    """Run every signal extractor; return {factor: {signal: bool}}.
+
+    `model` is the model that answered the turn, used only by MODEL_AWARE
+    signals. Left None (scoring a draft), those signals pass.
+    """
     text = text or ""
     return {
-        factor: {name: bool(fn(text)) for name, fn in signals.items()}
+        factor: {
+            name: bool(fn(text, model) if name in MODEL_AWARE else fn(text))
+            for name, fn in signals.items()
+        }
         for factor, signals in SIGNALS.items()
     }
 
@@ -332,9 +497,9 @@ SIGNAL_NAMES: list[str] = [
 STRUCTURAL_DIM = len(SIGNAL_NAMES)
 
 
-def signal_vector(text: str) -> list[float]:
+def signal_vector(text: str, model: str | None = None) -> list[float]:
     """Flatten all signals into a fixed-length 0/1 vector (the MLP's structural half)."""
-    results = extract_signals(text)
+    results = extract_signals(text, model)
     return [
         1.0 if results[factor][name] else 0.0
         for factor, signals in SIGNALS.items()

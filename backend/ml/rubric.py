@@ -19,16 +19,28 @@ from .features import extract_signals
 # weighting it above the validated quality factors would overstate the evidence;
 # weighting it lower would not change any ranking. Override with the
 # PROMPTLY_EFFICIENCY_WEIGHT env var to explore a different balance.
+# `examples` fell from 6% to 3%. It was the worst-performing factor on the
+# corpus by a wide margin (mean 0.8/10), and most of that gap was the rubric
+# asking the user to paste code the agent could open itself. The factor now
+# rewards grounding rather than transcription, and carries the weight its
+# remaining evidence supports.
+#
+# `model_fit` takes 7%: it is the only factor that measures money rather than
+# wording, and the spread it detects is real (Opus $5/$25 per MTok against
+# Sonnet $2/$10). It is weighted below the validated quality factors because it
+# rests on a keyword heuristic for task weight, not on measured outcomes.
+#
 # Declared in descending weight order: several consumers render factors by
 # iterating this dict, and the heaviest factor should be read first.
 WEIGHTS: dict[str, float] = {
-    "clarity": 0.22,
-    "specificity": 0.18,
-    "context": 0.17,
+    "clarity": 0.21,
+    "specificity": 0.17,
+    "context": 0.16,
     "efficiency": 0.15,
-    "constraints": 0.13,
+    "constraints": 0.12,
     "scope": 0.09,
-    "examples": 0.06,
+    "model_fit": 0.07,
+    "examples": 0.03,
 }
 
 
@@ -77,16 +89,47 @@ class RubricScore:
         }
 
 
+# A prompt that meets no signal in a factor is still a prompt, not a zero. The
+# old linear map (10 x met/total) put a four-signal factor at 2.5 for meeting
+# one, which compounded across seven factors into overall scores that clustered
+# in the 4-6 band and left almost nothing above 7 — a scale where the top third
+# is unreachable measures nothing at the top.
+#
+# FLOOR is the credit for showing up; CURVE bends the middle upward so partial
+# credit accrues faster than linearly. Both ends stay fixed: meeting nothing is
+# still the worst score available, and 10 still requires every signal.
+#
+# Calibrated on the 284-prompt corpus rather than guessed. A floor of 2.0 read
+# as generous but pushed the *minimum* observed score to 5.3, which trades an
+# unusable top of the scale for an unusable bottom — if nothing can score badly,
+# a good score means nothing. At 1.0/0.90 the corpus mean moves 5.19 -> 6.35 and
+# still spans 4.6 to 8.1, so both ends of the range stay reachable.
+#
+# Most of that lift is not from these two constants: the signal fixes alone
+# (structured prompts exempt from the length penalties, `examples` rewarding
+# grounding instead of transcription) move the mean to 5.74 on their own, and
+# they move it for the prompts that deserve it rather than for everything.
+FACTOR_FLOOR = 1.0
+FACTOR_CURVE = 0.90
+
+
 def _factor_score(signal_results: dict[str, bool]) -> float:
     if not signal_results:
         return 0.0
     met = sum(1 for v in signal_results.values() if v)
-    return 10.0 * met / len(signal_results)
+    fraction = met / len(signal_results)
+    if fraction <= 0.0:
+        return FACTOR_FLOOR
+    return FACTOR_FLOOR + (10.0 - FACTOR_FLOOR) * (fraction ** FACTOR_CURVE)
 
 
-def score_prompt(text: str) -> RubricScore:
-    """Score a prompt's text against the rubric."""
-    signals = extract_signals(text)
+def score_prompt(text: str, model: str | None = None) -> RubricScore:
+    """Score a prompt's text against the rubric.
+
+    `model` is the model that answered the turn; it feeds the `model_fit`
+    factor only. Omitted (scoring an unsent draft), that factor passes.
+    """
+    signals = extract_signals(text, model)
     factors = {factor: _factor_score(results) for factor, results in signals.items()}
     overall = sum(factors[f] * WEIGHTS[f] for f in WEIGHTS)
     return RubricScore(overall=overall, factors=factors, signals=signals)

@@ -14,6 +14,7 @@ from typing import Optional
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -87,6 +88,12 @@ class Prompt(Base):
     # slash-command echoes, IDE events). Only "user" rows are scored/reported.
     kind: Mapped[Optional[str]] = mapped_column(String(24), index=True)
 
+    # Excluded from every score and aggregate at the user's request. For turns
+    # that are real prompts but not work the user wants graded: asking a
+    # question mid-task, retrieving a description, a quick lookup. Distinct from
+    # `kind`, which marks turns nobody typed; `hidden` is a deliberate choice.
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+
     # Project this turn actually belongs to, inferred from the files it touched.
     # Overrides the session's cwd, which is wrong whenever Claude Code is
     # started in one repo and used on another.
@@ -117,6 +124,7 @@ class Score(Base):
     scope: Mapped[Optional[float]] = mapped_column(Float)
     examples: Mapped[Optional[float]] = mapped_column(Float)
     efficiency: Mapped[Optional[float]] = mapped_column(Float)
+    model_fit: Mapped[Optional[float]] = mapped_column(Float)
 
     model_phase: Mapped[Optional[int]] = mapped_column(Integer)  # 1=rubric, 2=MLP, 3=fine-tuned
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

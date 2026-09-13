@@ -28,8 +28,9 @@ FACTOR_MEANING = {
     "context": "Supplies background, intent and the relevant stack",
     "constraints": "Bounds the work: what not to change, where to stop",
     "scope": "One task per request, sized to be reviewable",
-    "examples": "Shows code, errors, or a concrete input/output case",
+    "examples": "Points at real code, an error, or a concrete input/output case",
     "efficiency": "Spends tokens sparingly and bounds the size of the reply",
+    "model_fit": "Matches the model to the size of the task, rather than reaching for the largest one",
 }
 
 
@@ -79,7 +80,7 @@ def redacted_payload(report: dict, anonymize: bool = False) -> dict:
                 "name": f,
                 "score": (report.get("factors") or {}).get(f),
                 "weight": WEIGHTS[f],
-                "measures": FACTOR_MEANING[f],
+                "measures": FACTOR_MEANING.get(f, ""),
             }
             for f in WEIGHTS
         ],
