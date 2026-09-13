@@ -31,15 +31,27 @@ All four read the same database and call the same scoring engine, so they can ne
 
 ## Install
 
-Requires Python 3.10+ and Claude Code. One line:
+Requires Python 3.10+ and Claude Code. Setup is native on every OS: macOS and Linux get a bash script, Windows gets a PowerShell script that does the same seven things — nothing here needs WSL or Git Bash.
+
+**macOS / Linux:**
 
 ```bash
 git clone https://github.com/AaryanKassam/Prompt.ly.git && cd Prompt.ly && ./setup
 ```
 
-`./setup` creates the virtualenv, installs the five dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds, naming each one as it goes.
+**Windows** (PowerShell — press <kbd>Win</kbd>, type "PowerShell", open it):
 
-It is **safe to re-run**: every step checks before it acts, so it doubles as a repair command when something drifts.
+```powershell
+git clone https://github.com/AaryanKassam/Prompt.ly.git
+cd Prompt.ly
+.\setup.ps1
+```
+
+> First time running a local script? Windows blocks unsigned `.ps1` files by default. If you get an "execution policy" error, run this once in the same window, then retry: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. It only relaxes the policy for the current PowerShell process, not system-wide.
+
+Either script creates the virtualenv, installs the five dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds, naming each one as it goes.
+
+Both are **safe to re-run**: every step checks before it acts, so re-running doubles as a repair command when something drifts.
 
 ```bash
 ./setup --no-path      # don't touch your shell rc file
@@ -47,14 +59,22 @@ It is **safe to re-run**: every step checks before it acts, so it doubles as a r
 ./setup --no-vscode    # skip the editor extension
 ```
 
-The only thing it changes outside the repo is one `export PATH` line in your `.zshrc`/`.bashrc`, and only if `~/.local/bin` isn't already on your PATH. It says so when it does.
+```powershell
+.\setup.ps1 -NoPath      # don't touch your user PATH
+.\setup.ps1 -NoHook      # skip the auto-import hook
+.\setup.ps1 -NoVSCode    # skip the editor extension
+```
+
+The only thing either script changes outside the repo is how `promptly` gets found: macOS/Linux add one `export PATH` line to `.zshrc`/`.bashrc`; Windows sets the `PATH` User environment variable via `[Environment]::SetEnvironmentVariable`, both only if `~/.local/bin` isn't already on the PATH. Each says so when it does, and on Windows the VS Code extension is copied in rather than symlinked (Windows symlinks need Developer Mode or admin rights) — re-run the setup script after updating the extension to refresh it.
 
 ### The three commands you'll actually use
+
+Identical on every OS once `promptly` is on your PATH:
 
 ```bash
 promptly score "your draft prompt"   # rate + token cost BEFORE you send it
 promptly report                      # how you're prompting in this folder
-./scripts/dev                        # launch the dashboard at localhost:3000
+promptly dashboard                   # launch the dashboard at localhost:3000
 ```
 
 Everything else is optional. `promptly doctor` re-checks every part of the setup.
@@ -67,8 +87,12 @@ backend/venv/bin/pip install "mcp[cli]"                    # Claude desktop exte
 backend/venv/bin/pip install torch sentence-transformers   # training the MLP
 ```
 
+On Windows, the venv's `pip` is at `backend\venv\Scripts\pip.exe` instead of `backend/venv/bin/pip`.
+
 <details>
 <summary><b>Setting it up by hand instead</b></summary>
+
+**macOS / Linux:**
 
 ```bash
 python3 -m venv backend/venv
@@ -78,13 +102,29 @@ promptly install-hook                                  # auto-import after each 
 promptly sync                                          # import existing history
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+python -m venv backend\venv
+backend\venv\Scripts\pip.exe install -r backend\requirements.txt
+# Symlinks need admin rights on Windows, so copy the launcher onto your PATH
+# instead. Any folder already on PATH works; $HOME\.local\bin matches what
+# setup.ps1 uses.
+New-Item -ItemType Directory -Force -Path "$HOME\.local\bin" | Out-Null
+Copy-Item .\scripts\promptly.cmd "$HOME\.local\bin\promptly.cmd"
+[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$HOME\.local\bin", "User")
+# open a new terminal, then:
+promptly install-hook                                  # auto-import after each session
+promptly sync                                          # import existing history
+```
+
 </details>
 
 ### Terminal
 
-`install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run. Run `promptly` on its own to see every command.
+`install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run. Run `promptly` on its own (or `promptly help`) to see every command.
 
-> **Using the VS Code integrated terminal?** Nothing extra to install. It is an ordinary interactive shell, so it reads the same `~/.zshrc` (or `~/.bashrc`) that `./setup` configured. Run the same `promptly` commands there as in Terminal.app, one install covers both. If `promptly` works in Terminal but not in VS Code, the integrated terminal is likely set to a non-interactive or different shell; the fix is to add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
+> **Using the VS Code integrated terminal?** Nothing extra to install, on any OS. It's an ordinary interactive shell, so it reads the same PATH configuration setup just changed — the same `.zshrc`/`.bashrc` on macOS/Linux, the same user `PATH` variable on Windows. Run the same `promptly` commands there as in Terminal.app or PowerShell; one install covers both. If `promptly` works in one but not the other, the integrated terminal is likely a non-interactive shell or wasn't reopened after setup ran — open a new terminal, or on macOS/Linux add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
 
 **Score a prompt before you send it**, the thing only the terminal can do:
 
@@ -142,7 +182,14 @@ The dashboard is the deep-dive surface: expandable factors, per-signal evidence,
 ./scripts/dev stop       # stop both
 ```
 
-`./scripts/dev` frees the ports before binding them, so it doubles as a restart.
+```powershell
+.\scripts\dev.ps1            # start both
+.\scripts\dev.ps1 backend    # API only
+.\scripts\dev.ps1 frontend   # dashboard only
+.\scripts\dev.ps1 stop       # stop both
+```
+
+Either frees the ports before binding them, so running it again doubles as a restart. `promptly dashboard` (above) calls whichever one matches your OS automatically — reach for these directly only when you want the servers without the browser opening.
 
 ### Hiding a turn
 
@@ -162,10 +209,16 @@ The launcher re-execs under the repo venv, so it works from any directory regard
 
 ### VS Code
 
-Already installed by `./setup`, just reload the window (`Cmd+Shift+P` → *Developer: Reload Window*) and the Prompt.ly icon appears in the activity bar. To link it by hand:
+Already installed by setup, just reload the window (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows/Linux → *Developer: Reload Window*) and the Prompt.ly icon appears in the activity bar. To link it by hand:
 
 ```bash
 ln -s "$PWD/vscode-extension" ~/.vscode/extensions/promptly-1.0.0
+```
+
+On Windows, symlinks need admin rights or Developer Mode, so copy instead of linking (re-run after updating the extension to pick up changes):
+
+```powershell
+Copy-Item .\vscode-extension "$HOME\.vscode\extensions\promptly-1.0.0" -Recurse -Force
 ```
 
 - **Sidebar**: score, trend, factor bars, token cost, recommendations, worst prompts for the folder you have open
@@ -178,15 +231,16 @@ It holds no scoring logic; it shells out to `promptly report --json`. If the CLI
 ### Dashboard
 
 ```bash
-./scripts/dev            # starts both servers
+promptly dashboard       # starts both servers and opens the browser, on any OS
 ```
 
-Open **http://localhost:3000**. `./scripts/dev stop` shuts them down.
+Open **http://localhost:3000**. `promptly dashboard --no-open` starts the servers without opening a browser; `./scripts/dev stop` (or `.\scripts\dev.ps1 stop` on Windows) shuts them down.
 
 ### Claude app extension
 
 ```bash
-backend/venv/bin/python mcp_server/install.py
+backend/venv/bin/python mcp_server/install.py       # macOS / Linux
+backend\venv\Scripts\python.exe mcp_server\install.py   # Windows
 ```
 
 Restart the Claude desktop app, then ask *"what's my prompt report?"*. It auto-detects the folder open in your editor. Five tools: `prompt_report`, `score_draft_prompt`, `detect_workspace`, `list_tracked_projects`, `refresh_data`.
@@ -371,10 +425,19 @@ Two details worth knowing:
 
 ```bash
 promptly doctor    # what's wired up, and the exact fix for anything that isn't
-./setup            # re-run to repair a broken install; every step is idempotent
+./setup            # macOS/Linux: re-run to repair a broken install
+.\setup.ps1         # Windows: same thing
 ```
 
-`doctor` checks logs, database, `.env`, API key, scoring model, auto-sync hook and both extensions. `./setup` rebuilds whatever is missing without touching what already works.
+`doctor` checks logs, database, `.env`, API key, scoring model, auto-sync hook and both extensions, the same way on every OS. Either setup script rebuilds whatever is missing without touching what already works — both are idempotent.
+
+**Windows-specific issues:**
+
+| Symptom | Fix |
+|---|---|
+| `.ps1 cannot be loaded because running scripts is disabled` | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` once in that PowerShell window, then retry. |
+| `promptly` not found after setup | Open a new terminal — `setup.ps1` sets the `PATH` for new processes, not the one it ran in. |
+| `promptly score -c` returns nothing | Needs PowerShell on PATH (bundled with every supported Windows version) to read the clipboard; `cmd.exe`-only environments without PowerShell aren't supported. |
 
 ---
 

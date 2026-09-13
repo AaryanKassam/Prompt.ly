@@ -5,6 +5,9 @@ Symlink this onto your PATH so the CLI works from any project directory:
 
     ln -s "$PWD/scripts/promptly" /usr/local/bin/promptly
 
+On Windows, use scripts/promptly.cmd instead — bare Python files aren't
+directly executable there, and it also resolves the venv's Scripts folder layout.
+
 It re-execs under the repo's virtualenv when one exists, so the command works
 regardless of which Python is active in the caller's environment — VS Code,
 a Claude Code hook and a plain shell all arrive here with different PATHs.
@@ -17,7 +20,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VENV_DIR = REPO_ROOT / "backend" / "venv"
-VENV_PYTHON = VENV_DIR / "bin" / "python"
+# venv layout differs by platform: Scripts\python.exe on Windows, bin/python
+# everywhere else. Checked once here rather than assumed, since this file is
+# also what scripts/promptly.cmd hands off to on Windows.
+VENV_PYTHON = VENV_DIR / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 # Set once before re-exec so a misconfigured venv can never loop forever.
 _REEXEC_FLAG = "PROMPTLY_REEXECED"

@@ -255,8 +255,20 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def _read_clipboard() -> str:
     """Clipboard contents, so a drafted prompt can be scored without re-typing."""
+    import os
     import shutil
     import subprocess
+
+    if os.name == "nt":
+        # No pbpaste/xclip equivalent ships with Windows; PowerShell's
+        # Get-Clipboard does, on every Windows 10+ install with no extra tool.
+        try:
+            return subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+        except (subprocess.SubprocessError, OSError):
+            return ""
 
     for cmd in (["pbpaste"], ["wl-paste"], ["xclip", "-selection", "clipboard", "-o"], ["xsel", "-b"]):
         if shutil.which(cmd[0]):
@@ -273,7 +285,9 @@ def _read_editor() -> str:
     import subprocess
     import tempfile
 
-    editor = os.getenv("EDITOR") or os.getenv("VISUAL") or "nano"
+    # nano isn't bundled with Windows; notepad is the one editor guaranteed present.
+    default_editor = "notepad" if os.name == "nt" else "nano"
+    editor = os.getenv("EDITOR") or os.getenv("VISUAL") or default_editor
     with tempfile.NamedTemporaryFile("w+", suffix=".md", delete=False) as fh:
         fh.write("# Write your prompt below. Lines starting with # are ignored.\n\n")
         temp = fh.name
@@ -491,7 +505,16 @@ def cmd_watch(args: argparse.Namespace) -> int:
 
 def hook_command() -> str:
     """Absolute path, so the hook doesn't depend on `promptly` being on PATH."""
+    import os
+
     launcher = Path(__file__).resolve().parent.parent / "scripts" / "promptly"
+    if os.name == "nt":
+        # Claude Code hooks run through cmd.exe on Windows, which has no
+        # /dev/null (NUL is the equivalent) and a different truthiness for "||".
+        # `exit /b 0` plays the same role as POSIX's `|| true`: a failed sync
+        # must never fail the hook that triggered it.
+        cmd_wrapper = launcher.with_suffix(".cmd")
+        return f'"{cmd_wrapper}" sync --json >NUL 2>&1 & exit /b 0'
     return f"{launcher} sync --json >/dev/null 2>&1 || true"
 
 
@@ -714,17 +737,23 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     ))
 
     # Claude desktop / Claude Code MCP registration.
-    mcp_paths = [
-        Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
-        repo / ".mcp.json",
-    ]
+    import os as _os
+    import sys as _sys
+
+    if _sys.platform == "darwin":
+        desktop_cfg = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    elif _os.name == "nt":
+        desktop_cfg = Path(_os.getenv("APPDATA", Path.home() / "AppData" / "Roaming")) / "Claude" / "claude_desktop_config.json"
+    else:
+        desktop_cfg = Path(_os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / "Claude" / "claude_desktop_config.json"
+    mcp_paths = [desktop_cfg, repo / ".mcp.json"]
     registered = []
     for cfg in mcp_paths:
         if not cfg.exists():
             continue
         try:
             if "promptly" in json.loads(cfg.read_text()).get("mcpServers", {}):
-                registered.append("desktop" if "Application Support" in str(cfg) else "Claude Code")
+                registered.append("desktop" if cfg == desktop_cfg else "Claude Code")
         except json.JSONDecodeError:
             continue
     checks.append((
@@ -1045,12 +1074,20 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     if up():
         console.print(f"\n  [green]Dashboard already running.[/green]  [grey50]{url}[/grey50]\n")
     else:
-        script = Path(__file__).resolve().parent.parent / "scripts" / "dev"
+        import os
+
+        scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+        if os.name == "nt":
+            script = scripts_dir / "dev.ps1"
+            cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
+        else:
+            script = scripts_dir / "dev"
+            cmd = [str(script)]
         if not script.exists():
-            console.print(f"[red]Can't find {script}. Run ./scripts/dev from the repo.[/red]")
+            console.print(f"[red]Can't find {script}. Run it directly from the repo.[/red]")
             return 1
         console.print("\n  [grey62]Starting servers…[/grey62]")
-        proc = subprocess.run([str(script)], capture_output=not args.verbose, text=True)
+        proc = subprocess.run(cmd, capture_output=not args.verbose, text=True)
         if proc.returncode != 0:
             console.print("[red]Servers failed to start.[/red]")
             if proc.stdout:
