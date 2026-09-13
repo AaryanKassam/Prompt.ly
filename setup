@@ -81,6 +81,32 @@ else
   ok "installed everything in backend/requirements.txt"
 fi
 
+# --- 3b. frontend dependencies --------------------------------------------
+# The dashboard is `next dev` under frontend/node_modules — nothing runs it
+# without this. Same hash-stamp idempotence as the Python deps above, keyed on
+# package-lock.json since that's what actually pins what gets installed.
+FRONTEND="$REPO/frontend"
+FE_LOCK="$FRONTEND/package-lock.json"
+FE_STAMP="$FRONTEND/node_modules/.promptly-lockfile"
+if command -v npm >/dev/null; then
+  FE_HASH="$(python3 -c '
+import hashlib, sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+' "$FE_LOCK")"
+  if [ -d "$FRONTEND/node_modules" ] && [ -f "$FE_STAMP" ] \
+     && [ "$(cat "$FE_STAMP" 2>/dev/null)" = "$FE_HASH" ]; then
+    skip "frontend dependencies already match package-lock.json"
+  else
+    printf '  installing dashboard dependencies…\n'
+    ( cd "$FRONTEND" && npm install --quiet ) \
+      || die "npm install failed in frontend/; re-run 'cd frontend && npm install' to see why"
+    printf '%s\n' "$FE_HASH" > "$FE_STAMP"
+    ok "installed the dashboard's npm dependencies"
+  fi
+else
+  warn "npm not found: the dashboard needs Node.js; install it, then run 'cd frontend && npm install'"
+fi
+
 # --- 4. put `promptly` on PATH -------------------------------------------
 mkdir -p "$BIN_DIR"
 LINK="$BIN_DIR/promptly"
@@ -190,7 +216,7 @@ fi
 printf '\n%sReady.%s\n\n' "$B" "$R"
 printf '  %spromptly score "your draft"%s   rate it, and see its token cost, before sending\n' "$B" "$R"
 printf '  %spromptly report%s               how you are prompting in this folder\n' "$B" "$R"
-printf '  %s./scripts/dev%s                 dashboard at http://localhost:3000\n\n' "$B" "$R"
+printf '  %spromptly dashboard%s            dashboard at http://localhost:3000\n\n' "$B" "$R"
 if [ "$ON_PATH" = 0 ]; then
   printf '  %sOpen a new terminal first%s — PATH was just changed.\n\n' "$Y" "$R"
 fi

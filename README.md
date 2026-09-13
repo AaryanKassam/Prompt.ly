@@ -31,7 +31,7 @@ All four read the same database and call the same scoring engine, so they can ne
 
 ## Install
 
-Requires Python 3.10+ and Claude Code. Setup is native on every OS: macOS and Linux get a bash script, Windows gets a PowerShell script that does the same seven things — nothing here needs WSL or Git Bash.
+Requires Python 3.10+, Node.js 18+ (for the dashboard), and Claude Code. Setup is native on every OS: macOS and Linux get a bash script, Windows gets a PowerShell script that does the same eight things; nothing here needs WSL or Git Bash.
 
 **macOS / Linux:**
 
@@ -39,7 +39,7 @@ Requires Python 3.10+ and Claude Code. Setup is native on every OS: macOS and Li
 git clone https://github.com/AaryanKassam/Prompt.ly.git && cd Prompt.ly && ./setup
 ```
 
-**Windows** (PowerShell — press <kbd>Win</kbd>, type "PowerShell", open it):
+**Windows** (PowerShell: press <kbd>Win</kbd>, type "PowerShell", open it):
 
 ```powershell
 git clone https://github.com/AaryanKassam/Prompt.ly.git
@@ -49,7 +49,7 @@ cd Prompt.ly
 
 > First time running a local script? Windows blocks unsigned `.ps1` files by default. If you get an "execution policy" error, run this once in the same window, then retry: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. It only relaxes the policy for the current PowerShell process, not system-wide.
 
-Either script creates the virtualenv, installs the five dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds, naming each one as it goes.
+Either script creates the virtualenv, installs the five Python dependencies, installs the dashboard's npm dependencies, puts `promptly` on your PATH, imports your existing Claude Code history, registers the auto-import hook, and installs the VS Code extension into every VS Code-family editor it finds, naming each one as it goes.
 
 Both are **safe to re-run**: every step checks before it acts, so re-running doubles as a repair command when something drifts.
 
@@ -65,7 +65,7 @@ Both are **safe to re-run**: every step checks before it acts, so re-running dou
 .\setup.ps1 -NoVSCode    # skip the editor extension
 ```
 
-The only thing either script changes outside the repo is how `promptly` gets found: macOS/Linux add one `export PATH` line to `.zshrc`/`.bashrc`; Windows sets the `PATH` User environment variable via `[Environment]::SetEnvironmentVariable`, both only if `~/.local/bin` isn't already on the PATH. Each says so when it does, and on Windows the VS Code extension is copied in rather than symlinked (Windows symlinks need Developer Mode or admin rights) — re-run the setup script after updating the extension to refresh it.
+The only thing either script changes outside the repo is how `promptly` gets found: macOS/Linux add one `export PATH` line to `.zshrc`/`.bashrc`; Windows sets the `PATH` User environment variable via `[Environment]::SetEnvironmentVariable`, both only if `~/.local/bin` isn't already on the PATH. Each says so when it does, and on Windows the VS Code extension is copied in rather than symlinked (Windows symlinks need Developer Mode or admin rights); re-run the setup script after updating the extension to refresh it.
 
 ### The three commands you'll actually use
 
@@ -124,7 +124,7 @@ promptly sync                                          # import existing history
 
 `install-hook` registers a Claude Code `SessionEnd` hook, so new sessions import themselves and there's nothing to remember to run. Run `promptly` on its own (or `promptly help`) to see every command.
 
-> **Using the VS Code integrated terminal?** Nothing extra to install, on any OS. It's an ordinary interactive shell, so it reads the same PATH configuration setup just changed — the same `.zshrc`/`.bashrc` on macOS/Linux, the same user `PATH` variable on Windows. Run the same `promptly` commands there as in Terminal.app or PowerShell; one install covers both. If `promptly` works in one but not the other, the integrated terminal is likely a non-interactive shell or wasn't reopened after setup ran — open a new terminal, or on macOS/Linux add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
+> **Using the VS Code integrated terminal?** Nothing extra to install, on any OS. It's an ordinary interactive shell, so it reads the same PATH configuration setup just changed: the same `.zshrc`/`.bashrc` on macOS/Linux, the same user `PATH` variable on Windows. Run the same `promptly` commands there as in Terminal.app or PowerShell; one install covers both. If `promptly` works in one but not the other, the integrated terminal is likely a non-interactive shell or wasn't reopened after setup ran; open a new terminal, or on macOS/Linux add `export PATH="$HOME/.local/bin:$PATH"` to the rc file that shell reads.
 
 **Score a prompt before you send it**, the thing only the terminal can do:
 
@@ -189,7 +189,7 @@ The dashboard is the deep-dive surface: expandable factors, per-signal evidence,
 .\scripts\dev.ps1 stop       # stop both
 ```
 
-Either frees the ports before binding them, so running it again doubles as a restart. `promptly dashboard` (above) calls whichever one matches your OS automatically — reach for these directly only when you want the servers without the browser opening.
+Either frees the ports before binding them, so running it again doubles as a restart. `promptly dashboard` (above) calls whichever one matches your OS automatically. Reach for these directly only when you want the servers without the browser opening.
 
 ### Hiding a turn
 
@@ -429,14 +429,14 @@ promptly doctor    # what's wired up, and the exact fix for anything that isn't
 .\setup.ps1         # Windows: same thing
 ```
 
-`doctor` checks logs, database, `.env`, API key, scoring model, auto-sync hook and both extensions, the same way on every OS. Either setup script rebuilds whatever is missing without touching what already works — both are idempotent.
+`doctor` checks logs, database, `.env`, API key, scoring model, auto-sync hook, both extensions, and the dashboard's npm dependencies, the same way on every OS. Either setup script rebuilds whatever is missing without touching what already works; both are idempotent.
 
 **Windows-specific issues:**
 
 | Symptom | Fix |
 |---|---|
 | `.ps1 cannot be loaded because running scripts is disabled` | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` once in that PowerShell window, then retry. |
-| `promptly` not found after setup | Open a new terminal — `setup.ps1` sets the `PATH` for new processes, not the one it ran in. |
+| `promptly` not found after setup | Open a new terminal: `setup.ps1` sets the `PATH` for new processes, not the one it ran in. |
 | `promptly score -c` returns nothing | Needs PowerShell on PATH (bundled with every supported Windows version) to read the clipboard; `cmd.exe`-only environments without PowerShell aren't supported. |
 
 ---

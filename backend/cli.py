@@ -770,6 +770,16 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         else f'not installed; ln -s "{repo}/vscode-extension" {ext}',
     ))
 
+    # Dashboard's npm dependencies. Nothing about the Python setup catches this
+    # one: `promptly dashboard` fails with a bare "next: command not found"
+    # if it's skipped, which doesn't say what's missing.
+    frontend_deps = (repo / "frontend" / "node_modules").is_dir()
+    checks.append((
+        "Dashboard deps", frontend_deps,
+        "installed" if frontend_deps
+        else "not installed; run `cd frontend && npm install`",
+    ))
+
     if args.json:
         print(json.dumps([{"check": c, "ok": o, "detail": d} for c, o, d in checks]))
         return 0

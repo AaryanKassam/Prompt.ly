@@ -104,6 +104,36 @@ if ($DepsOk) {
     Ok "installed everything in backend\requirements.txt"
 }
 
+# --- 3b. frontend dependencies ------------------------------------------------
+# The dashboard is `next dev` under frontend\node_modules - nothing runs it
+# without this. Same hash-stamp idempotence as the Python deps above, keyed on
+# package-lock.json since that's what actually pins what gets installed.
+$Frontend = Join-Path $Repo "frontend"
+$FeLock = Join-Path $Frontend "package-lock.json"
+$FeStamp = Join-Path $Frontend "node_modules\.promptly-lockfile"
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    $FeHash = (Get-FileHash -Algorithm SHA256 $FeLock).Hash
+    $FeNodeModules = Join-Path $Frontend "node_modules"
+    if ((Test-Path $FeNodeModules) -and (Test-Path $FeStamp) -and ((Get-Content $FeStamp -ErrorAction SilentlyContinue) -eq $FeHash)) {
+        Skip "frontend dependencies already match package-lock.json"
+    } else {
+        Write-Host "  installing dashboard dependencies..."
+        Push-Location $Frontend
+        try {
+            & npm install --quiet
+            if ($LASTEXITCODE -ne 0) {
+                Die "npm install failed in frontend\ - re-run 'cd frontend; npm install' to see why"
+            }
+        } finally {
+            Pop-Location
+        }
+        Set-Content -Path $FeStamp -Value $FeHash -NoNewline
+        Ok "installed the dashboard's npm dependencies"
+    }
+} else {
+    Warn "npm not found - the dashboard needs Node.js; install it, then run 'cd frontend; npm install'"
+}
+
 # --- 4. put `promptly` on PATH -----------------------------------------------
 # Windows can't run a bare Python file by name and symlinks need elevated
 # privileges by default, so instead of linking scripts\promptly.cmd we write a
@@ -214,7 +244,7 @@ if (-not $NoVSCode) {
 Write-Host "`nReady.`n" -ForegroundColor White
 Write-Host '  promptly score "your draft"   rate it, and see its token cost, before sending'
 Write-Host "  promptly report               how you are prompting in this folder"
-Write-Host "  .\scripts\dev.ps1             dashboard at http://localhost:3000`n"
+Write-Host "  promptly dashboard             dashboard at http://localhost:3000`n"
 if (-not $OnPath) {
     Write-Host "  Open a new terminal first - PATH was just changed.`n" -ForegroundColor Yellow
 }
