@@ -2,7 +2,7 @@
 
 Scores how effectively you prompt Claude, per project, then shows you how to improve.
 
-Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across eight factors (six for quality, one for token efficiency, one for whether a cheaper model would have done), and reports how you're doing in whichever project you're working on. It runs entirely locally.
+Prompt.ly reads the Claude Code session logs already on your machine, grades every prompt 0–10 across eight factors (six for quality, one for token efficiency, one for whether a cheaper model would have worked), and reports how you're doing in whichever project you're working on. It runs entirely locally.
 
 ![Prompt.ly dashboard](docs/dashboard.png)
 
@@ -10,7 +10,7 @@ Prompt.ly reads the Claude Code session logs already on your machine, grades eve
 
 ## Why
 
-Everyone using an AI coding assistant is writing dozens of prompts a day, and nobody gets feedback on any of them. A vague prompt costs a search, a wrong guess, and a round trip, but that cost is invisible, so the habit never changes.
+Everyone using an AI coding assistant is writing dozens of prompts a day, and nobody gets feedback on any of them.
 
 Prompt.ly makes it visible, in both directions. It found that 97% of my prompts never paste the actual error and 92% never name a file, and that a single two-word prompt (`"do both"`) cost 57,303 output tokens.
 
