@@ -10,15 +10,20 @@ Two independent checks, because each answers a different objection:
     individual pairs invert.
 
   * **Outcome correlation** — on the user's real prompts, does a higher score
-    predict a better outcome? Uses the independent outcome signals (repetition,
-    iteration count, clarification, diff alignment) as ground truth, so it is not
-    the rubric grading its own homework.
+    predict a better outcome? Led by a rank correlation, because the outcome
+    label is bounded at 10 and most prompts sit on that bound, which pulls a
+    linear coefficient well below the relationship actually present. Uses the
+    independent outcome signals (repetition, iteration count, clarification,
+    diff alignment) as ground truth, so it is not the rubric grading its own
+    homework. Both figures carry a confidence interval: on a few hundred
+    prompts this number moves by more than a tenth on sample size alone.
 
 Neither uses a language model.
 """
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from sqlalchemy import select
@@ -91,6 +96,50 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
     return None if dx == 0 or dy == 0 else round(num / (dx * dy), 3)
 
 
+def _ranks(values: list[float]) -> list[float]:
+    """Competition-free average ranks, so ties share their midpoint."""
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        mid = (i + j) / 2 + 1
+        for k in range(i, j + 1):
+            ranks[order[k]] = mid
+        i = j + 1
+    return ranks
+
+
+def _spearman(xs: list[float], ys: list[float]) -> float | None:
+    """Rank correlation — the honest statistic for this label.
+
+    The outcome label is bounded at 10 and most prompts sit exactly on that
+    bound (no repetition, no retries, no clarifying question is the normal
+    case, not the exceptional one). Pearson measures *linear* association and
+    is pulled down hard by that pile-up, so on this corpus it reads roughly
+    half of the monotonic relationship that is actually there. Spearman only
+    cares about ordering, which is all the claim needs: do better-scored
+    prompts tend to land better?
+    """
+    return _pearson(_ranks(xs), _ranks(ys))
+
+
+def _fisher_ci(r: float | None, n: int) -> list[float] | None:
+    """95% interval for a correlation, via the Fisher z transform.
+
+    Reported because the bare coefficient invites over-reading. This figure
+    moves by more than a tenth on sample size alone, so a drop between two
+    runs is only news if the intervals do not overlap.
+    """
+    if r is None or n < 4 or abs(r) >= 1.0:
+        return None
+    z = 0.5 * math.log((1 + r) / (1 - r))
+    se = 1.96 / math.sqrt(n - 3)
+    return [round(math.tanh(z - se), 3), round(math.tanh(z + se), 3)]
+
+
 def run_outcome_correlation(db: DbSession) -> dict:
     """Does a higher rubric score predict a better real-world outcome?"""
     scores: list[float] = []
@@ -125,9 +174,20 @@ def run_outcome_correlation(db: DbSession) -> dict:
     low = [o for _, o in ordered[:mid]]
     high = [o for _, o in ordered[-mid:]] if mid else []
 
+    pearson = _pearson(scores, outcomes)
+    spearman = _spearman(scores, outcomes)
+    at_ceiling = sum(1 for o in outcomes if o >= 10.0) / len(outcomes)
+
     return {
         "n": len(scores),
-        "correlation": _pearson(scores, outcomes),
+        "correlation": pearson,
+        "correlation_ci": _fisher_ci(pearson, len(scores)),
+        "spearman": spearman,
+        "spearman_ci": _fisher_ci(spearman, len(scores)),
+        # What share of the label sits on its upper bound. This is the headline
+        # caveat on the Pearson figure rather than a footnote: the closer it is
+        # to 1, the less a linear coefficient can possibly report.
+        "outcome_at_ceiling": round(at_ceiling, 3),
         "mean_outcome_low_half": round(sum(low) / len(low), 2) if low else None,
         "mean_outcome_high_half": round(sum(high) / len(high), 2) if high else None,
     }

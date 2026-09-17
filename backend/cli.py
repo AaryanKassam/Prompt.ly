@@ -888,7 +888,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
     out.add_column()
     out.add_row("scored prompts", str(o["n"]))
     if o.get("correlation") is not None:
-        out.add_row("correlation r", str(o["correlation"]))
+        def _ci(key: str) -> str:
+            ci = o.get(key)
+            return f"  [grey42]95% CI {ci[0]:+.2f} to {ci[1]:+.2f}[/grey42]" if ci else ""
+
+        # Spearman leads. See _spearman() in validation.py: the label is bounded
+        # at 10 and piles up there, so Pearson understates the relationship.
+        out.add_row("Spearman rho", Text.from_markup(
+            f"{o['spearman']}{_ci('spearman_ci')}"))
+        out.add_row("Pearson r", Text.from_markup(
+            f"{o['correlation']}{_ci('correlation_ci')}"))
+        ceiling = o.get("outcome_at_ceiling")
+        if ceiling:
+            out.add_row("outcome at ceiling", Text.from_markup(
+                f"{ceiling:.0%}  [grey42]share of the label tied at 10/10[/grey42]"))
         out.add_row("outcome, low half", str(o["mean_outcome_low_half"]))
         out.add_row("outcome, high half", str(o["mean_outcome_high_half"]))
     console.print(

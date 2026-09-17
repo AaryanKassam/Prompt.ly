@@ -327,23 +327,22 @@ Neither number is causal. A prompt that costs 60k tokens may have been doing 60k
 
 Those four figures come from a fixed fixture, so they are reproducible: `promptly validate` gives the same answer on your machine as on mine.
 
-It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts, so the rubric isn't grading its own homework. Across every project tracked on this machine, `promptly validate` reports **r = 0.142** on 284 scored prompts.
+It also correlates scores against independent outcome signals (repetition, iteration count, clarification requests, diff alignment) on real prompts, so the rubric isn't grading its own homework. Across every project tracked on this machine, `promptly validate` reports this on 307 scored prompts:
 
-That figure fell from the **0.298** reported here previously, and it is worth being precise about why, because only part of it is the rubric's doing:
-
-| Rubric | Corpus | r |
+| Statistic | Value | 95% CI |
 |---|---|---|
-| Previous | 156 prompts | 0.298 |
-| Previous | 284 prompts (today) | 0.178 |
-| Current | 284 prompts (today) | 0.142 |
+| **Spearman rho** | **0.343** | 0.24 to 0.44 |
+| Pearson r | 0.151 | 0.04 to 0.26 |
 
-Most of the drop is the corpus nearly doubling, which is what the caveat at the end of this section always warned would happen. The rubric change accounts for the remaining **0.036**: making the scorer fairer to long structured prompts cost a little outcome correlation on this corpus, while the paired benchmark went *up* (AUC 0.981 to 0.985). That is a trade made knowingly, and stated rather than buried.
+**The rank correlation is the one to read, and this README previously reported the wrong one.** The outcome label is capped at 10, and 41% of prompts sit exactly on that cap, because "no repetition, no retries, no clarifying question" is the ordinary case rather than the exceptional one. Pearson measures *linear* association and is dragged down hard by that pile-up; Spearman only asks whether better-scored prompts tend to land better, which is the whole claim. On this corpus the difference is a factor of 2.3, and it is a property of the label's shape, not of the rubric.
 
-Either way the number is modest, which is worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and this metric still has a long way to go.
+That also revises a story told here previously. An earlier README reported **r = 0.298** on 156 prompts and then **0.142** on 284, and attributed **0.036** of the fall to a rubric change. The attribution arithmetic was right, but the confidence intervals on those figures are roughly ±0.11 and overlap almost entirely, so the fall was mostly sampling noise being read as a trend. `promptly validate` now prints an interval next to both coefficients so that mistake is harder to repeat.
+
+The number is still modest, which is worth stating plainly rather than burying: the benchmark separates hand-written good and bad prompts almost perfectly, but predicting real-world outcomes from prompt text alone is a much harder problem, and this metric still has a long way to go. The binding constraint is the *label*, not the rubric. Three of its four signals barely fire across 307 prompts (iteration count 10, clarification 11, diff alignment 22, the last because only 40 prompts have any changed files attributed to them at all), so almost all of the label's movement comes from the repetition term. Widening it is the work that would make this figure mean more.
 
 Against token cost specifically, the efficiency factor correlates **r = −0.250** with output tokens: higher efficiency, fewer tokens burned, in the direction it was designed to predict.
 
-> Every figure in this section that comes from *real prompts*, the correlations and the token totals above, is a snapshot of one machine's corpus on 2026-09-12 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
+> Every figure in this section that comes from *real prompts*, the correlations and the token totals above, is a snapshot of one machine's corpus on 2026-09-17 and moves as that corpus grows. The benchmark table does not. Run `promptly validate` and `promptly report` for your own numbers.
 
 ---
 
